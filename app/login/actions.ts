@@ -49,10 +49,14 @@ export async function signInWithGoogle() {
   const supabase = await createClient()
   const headersList = await headers()
   // Prefer explicit env-configured base URL; fallback to request origin; then localhost for dev
+  const forwardedProto = headersList.get('x-forwarded-proto') || ''
+  const forwardedHost = headersList.get('x-forwarded-host') || ''
+  const headerBase = forwardedHost ? `${forwardedProto || 'https'}://${forwardedHost}` : ''
   const requestOrigin = headersList.get('origin') || ''
   const baseUrl =
     process.env.APP_BASE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
+    headerBase ||
     requestOrigin ||
     'http://localhost:3000'
   

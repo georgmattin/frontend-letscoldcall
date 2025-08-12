@@ -11,17 +11,14 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
-      const isLocalEnv = process.env.NODE_ENV === 'development'
-      
-      if (isLocalEnv) {
-        // we can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
-        return NextResponse.redirect(`${origin}${next}`)
-      } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`)
-      } else {
-        return NextResponse.redirect(`${origin}${next}`)
-      }
+      // Determine the correct base URL to redirect to, preferring explicit env config
+      const envBase = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || ''
+      const forwardedProto = request.headers.get('x-forwarded-proto') || 'https'
+      const forwardedHost = request.headers.get('x-forwarded-host') || ''
+      const headerBase = forwardedHost ? `${forwardedProto}://${forwardedHost}` : ''
+      const baseUrl = envBase || headerBase || origin
+
+      return NextResponse.redirect(`${baseUrl}${next}`)
     }
   }
 
