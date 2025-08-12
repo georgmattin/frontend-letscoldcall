@@ -708,8 +708,15 @@ export default function OnboardingPage() {
                 {/* Step 2: Rent Number Selection */}
         {step === 'rent-number' && (
           <div className="min-h-screen flex flex-col lg:flex-row">
-            {/* Progress indicator */}
-            <OnboardingSidebar currentStep={2} />
+            {/* Progress indicator (allow returning to step 1 from step 2) */}
+            <OnboardingSidebar
+              currentStep={2}
+              onStep1Click={() => {
+                // Reset to the first choice step so the user can change selection
+                setSelectedOption('')
+                setStep('choice')
+              }}
+            />
 
             {/* Main content */}
             <div className="absolute inset-0 flex items-start justify-center px-4 py-8 lg:py-12 overflow-y-auto">

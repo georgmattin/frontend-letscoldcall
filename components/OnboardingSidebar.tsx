@@ -4,6 +4,8 @@ interface OnboardingSidebarProps {
   currentStep: 1 | 2 | 3
   forceAllCompleted?: boolean
   labelColor?: string
+  // Optional: when provided and currentStep === 2, allow clicking step 1 to go back
+  onStep1Click?: () => void
 }
 
 const circleStyles = {
@@ -25,7 +27,7 @@ const circleStyles = {
   connector: 'rgba(0,51,51,0.2)'
 } as const
 
-export default function OnboardingSidebar({ currentStep, forceAllCompleted, labelColor }: OnboardingSidebarProps) {
+export default function OnboardingSidebar({ currentStep, forceAllCompleted, labelColor, onStep1Click }: OnboardingSidebarProps) {
   const getState = (index: number): 'completed' | 'active' | 'upcoming' => {
     if (forceAllCompleted) return 'completed'
     if (index < currentStep) return 'completed'
@@ -50,7 +52,22 @@ export default function OnboardingSidebar({ currentStep, forceAllCompleted, labe
           {/* Step 1 */}
           <div
             className="w-[52px] h-[52px] rounded-full border flex items-center justify-center text-[27.65px] font-bold"
-            style={circleStyles[getState(1)]}
+            style={{
+              ...circleStyles[getState(1)],
+              cursor: currentStep === 2 && onStep1Click ? 'pointer' : 'default',
+            }}
+            onClick={() => {
+              if (currentStep === 2 && onStep1Click) onStep1Click()
+            }}
+            role={currentStep === 2 && onStep1Click ? 'button' : undefined}
+            aria-label={currentStep === 2 && onStep1Click ? 'Go back to step 1' : undefined}
+            tabIndex={currentStep === 2 && onStep1Click ? 0 : -1}
+            onKeyDown={(e) => {
+              if (currentStep === 2 && onStep1Click && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault()
+                onStep1Click()
+              }
+            }}
           >
             {getState(1) === 'completed' ? '✓' : 1}
           </div>
