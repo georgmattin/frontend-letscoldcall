@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -55,6 +55,8 @@ export default function OnboardingPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [step, setStep] = useState<'choice' | 'own-twilio' | 'rent-number' | 'select-package' | 'select-package-own' | 'payment' | 'setup-complete'>('choice')
+  const [completedSteps, setCompletedSteps] = useState<string[]>([])
+  const prevStepRef = useRef<typeof step | null>(null)
   const [selectedOption, setSelectedOption] = useState<'own' | 'rent' | ''>('')
   
   // Rent number flow state
@@ -258,6 +260,22 @@ export default function OnboardingPage() {
         }
 
         setUser(session.user)
+        // Load persisted onboarding progress for this user
+        try {
+          const { data: progress } = await supabase
+            .from('onboarding_progress')
+            .select('current_step, completed_steps')
+            .eq('user_id', session.user.id)
+            .maybeSingle()
+          if (progress?.current_step) {
+            setStep(progress.current_step as typeof step)
+          }
+          if (Array.isArray(progress?.completed_steps)) {
+            setCompletedSteps(progress!.completed_steps as string[])
+          }
+        } catch (e) {
+          console.warn('Failed to load onboarding progress:', e)
+        }
       } catch (error) {
         console.error('Auth error:', error)
         router.push('/login')
@@ -268,6 +286,37 @@ export default function OnboardingPage() {
 
     checkAuth()
   }, [router, supabase])
+
+  // Persist onboarding progress whenever step changes (append previous step to completed_steps)
+  useEffect(() => {
+    const saveProgress = async () => {
+      if (!user) return
+      try {
+        // Determine updated completed steps list
+        const prev = prevStepRef.current
+        let newCompleted = completedSteps
+        if (prev && prev !== step && !completedSteps.includes(prev)) {
+          newCompleted = [...completedSteps, prev]
+          setCompletedSteps(newCompleted)
+        }
+        await supabase
+          .from('onboarding_progress')
+          .upsert(
+            {
+              user_id: user.id,
+              current_step: step,
+              completed_steps: newCompleted,
+            },
+            { onConflict: 'user_id' }
+          )
+        // update prev step pointer
+        prevStepRef.current = step
+      } catch (e) {
+        console.warn('Failed to save onboarding progress:', e)
+      }
+    }
+    saveProgress()
+  }, [step, user, supabase, completedSteps])
 
   // Search for available numbers
   const searchNumbers = async () => {
