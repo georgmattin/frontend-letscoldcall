@@ -52,8 +52,17 @@ export default function TwilioVoiceProvider() {
       }
       sdkReadyRef.current = true
 
-      // Fetch access token
-      const res = await fetch("/api/twilio/access-token", { cache: "no-store" })
+      // Fetch access token from backend with Supabase user JWT
+      const supabase = createSupabaseClient()
+      const { data: sessionRes } = await supabase.auth.getSession()
+      const userJwt = sessionRes?.session?.access_token
+      const rawUrl = process.env.NEXT_PUBLIC_BACKEND_URL || ""
+      const normalizedBase = (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) ? rawUrl : (rawUrl ? `https://${rawUrl}` : "")
+      const backendUrl = normalizedBase.replace(/\/+$/, "")
+      const res = await fetch(`${backendUrl}/api/access-token`, {
+        cache: "no-store",
+        headers: userJwt ? { Authorization: `Bearer ${userJwt}` } : undefined,
+      })
       if (!res.ok) {
         throw new Error(`Failed to fetch Twilio token: ${res.status}`)
       }
@@ -374,7 +383,16 @@ export default function TwilioVoiceProvider() {
       const onReject = onCancel
       const onTokenWillExpire = async () => {
         try {
-          const res = await fetch("/api/twilio/access-token", { cache: "no-store" })
+          const supabase = createSupabaseClient()
+          const { data: sessionRes } = await supabase.auth.getSession()
+          const userJwt = sessionRes?.session?.access_token
+          const rawUrl = process.env.NEXT_PUBLIC_BACKEND_URL || ""
+          const normalizedBase = (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) ? rawUrl : (rawUrl ? `https://${rawUrl}` : "")
+          const backendUrl = normalizedBase.replace(/\/+$/, "")
+          const res = await fetch(`${backendUrl}/api/access-token`, {
+            cache: "no-store",
+            headers: userJwt ? { Authorization: `Bearer ${userJwt}` } : undefined,
+          })
           const data = await res.json()
           if (data?.token) {
             device.updateToken(data.token)
