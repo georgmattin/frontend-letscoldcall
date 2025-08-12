@@ -98,13 +98,15 @@ export default function LoginPage() {
       <div className="min-h-screen" style={{ fontFamily: 'Open Sans, sans-serif', backgroundColor: '#FFFFFF' }}>
         {/* Logo in top-left corner */}
         <div className="absolute top-6 left-6">
-          <Image 
-            src="/Logo-full-green.svg" 
-            alt="WeColdCall Logo" 
-            width={150} 
-            height={50}
-            className="w-auto"
-          />
+          <Link href="/">
+            <Image 
+              src="/Logo-full-green.svg" 
+              alt="WeColdCall Logo" 
+              width={150} 
+              height={50}
+              className="w-auto"
+            />
+          </Link>
         </div>
 
         {/* Centered content */}

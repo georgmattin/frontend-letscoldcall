@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import Image from 'next/image'
+import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
 
 export default function VerifyEmailPage() {
@@ -47,13 +48,15 @@ export default function VerifyEmailPage() {
       <div className="min-h-screen" style={{ fontFamily: 'Open Sans, sans-serif', backgroundColor: '#FFFFFF' }}>
         {/* Logo in top-left corner - align with login page */}
         <div className="absolute top-6 left-6">
-          <Image 
-            src="/Logo-full-green.svg" 
-            alt="WeColdCall Logo" 
-            width={150} 
-            height={50}
-            className="w-auto"
-          />
+          <Link href="/">
+            <Image 
+              src="/Logo-full-green.svg" 
+              alt="WeColdCall Logo" 
+              width={150} 
+              height={50}
+              className="w-auto"
+            />
+          </Link>
         </div>
 
         {/* Centered content - align with login page */}

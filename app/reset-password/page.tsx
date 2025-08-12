@@ -101,13 +101,15 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen bg-white" style={{ fontFamily: 'Open Sans, sans-serif' }}>
         {/* Logo */}
         <div className="absolute top-6 left-6">
-          <Image 
-            src="/Logo-full-green.svg" 
-            alt="WeColdCall Logo" 
-            width={150} 
-            height={50}
-            className="w-auto"
-          />
+          <Link href="/">
+            <Image 
+              src="/Logo-full-green.svg" 
+              alt="WeColdCall Logo" 
+              width={150} 
+              height={50}
+              className="w-auto"
+            />
+          </Link>
         </div>
 
         {/* Centered content */}
