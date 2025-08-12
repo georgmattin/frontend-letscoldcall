@@ -36,8 +36,14 @@ export default function LoginPage() {
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.user) {
           setUser(session.user)
-          // If already logged in, go straight to dashboard
-          router.replace('/dashboard')
+          // Decide destination based on onboarding status
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('onboarding_status')
+            .eq('id', session.user.id)
+            .maybeSingle()
+          const done = (profile?.onboarding_status || '').toLowerCase() === 'yes'
+          router.replace(done ? '/dashboard' : '/onboarding')
           return
         }
         setUser(null)
@@ -53,9 +59,20 @@ export default function LoginPage() {
 
   // Redirect on auth state changes (e.g., after successful login or OAuth callback)
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        router.replace('/dashboard')
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('onboarding_status')
+            .eq('id', session.user.id)
+            .maybeSingle()
+          const done = (profile?.onboarding_status || '').toLowerCase() === 'yes'
+          router.replace(done ? '/dashboard' : '/onboarding')
+        } catch (e) {
+          console.error('Profile check after auth change failed:', e)
+          router.replace('/onboarding')
+        }
       }
     })
     return () => {

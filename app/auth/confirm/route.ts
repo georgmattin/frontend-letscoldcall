@@ -18,11 +18,22 @@ export async function GET(request: NextRequest) {
     })
 
     if (!error) {
-      // redirect user to specified redirect URL or root of app
-      redirect(next)
+      // Redirect based on onboarding status
+      const { data: userRes } = await supabase.auth.getUser()
+      const userId = userRes.user?.id
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('onboarding_status')
+          .eq('id', userId)
+          .maybeSingle()
+        const done = (profile?.onboarding_status || '').toLowerCase() === 'yes'
+        redirect(done ? '/dashboard' : '/onboarding')
+      }
+      redirect('/onboarding')
     }
   }
 
   // redirect the user to an error page with some instructions
   redirect('/login?message=E-posti kinnitus ebaõnnestus')
-} 
+}

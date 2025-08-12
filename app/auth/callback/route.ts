@@ -11,6 +11,20 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
+      // Fetch user's onboarding status
+      const { data: userRes } = await supabase.auth.getUser()
+      const userId = userRes.user?.id
+      let destination = '/onboarding'
+      if (userId) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('onboarding_status')
+          .eq('id', userId)
+          .maybeSingle()
+        const done = (profile?.onboarding_status || '').toLowerCase() === 'yes'
+        destination = done ? '/dashboard' : '/onboarding'
+      }
+
       // Determine the correct base URL to redirect to, preferring explicit env config
       const envBase = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || ''
       const forwardedProto = request.headers.get('x-forwarded-proto') || 'https'
@@ -18,7 +32,7 @@ export async function GET(request: NextRequest) {
       const headerBase = forwardedHost ? `${forwardedProto}://${forwardedHost}` : ''
       const baseUrl = envBase || headerBase || origin
 
-      return NextResponse.redirect(`${baseUrl}${next}`)
+      return NextResponse.redirect(`${baseUrl}${destination}`)
     }
   }
 

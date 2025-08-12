@@ -21,8 +21,22 @@ export async function login(formData: FormData) {
     redirect('/login?message=Sisselogimine ebaõnnestus')
   }
 
+  // Decide destination based on onboarding status
+  const { data: userRes } = await supabase.auth.getUser()
+  const userId = userRes.user?.id
+  if (!userId) {
+    redirect('/login?message=Sisselogimine ebaõnnestus')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('onboarding_status')
+    .eq('id', userId!)
+    .maybeSingle()
+
+  const done = (profile?.onboarding_status || '').toLowerCase() === 'yes'
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect(done ? '/dashboard' : '/onboarding')
 }
 
 export async function signup(formData: FormData) {
