@@ -43,59 +43,59 @@ export default function VerifyEmailPage() {
 
   return (
     <>
-      <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet" />
-      <div className="min-h-screen" style={{ fontFamily: 'Source Sans Pro, sans-serif', backgroundColor: '#F9FAFB' }}>
-        {/* Sticky logo in top-left corner - same as register page */}
-        <div className="fixed top-6 left-6 z-10">
+      <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+      <div className="min-h-screen" style={{ fontFamily: 'Open Sans, sans-serif', backgroundColor: '#FFFFFF' }}>
+        {/* Logo in top-left corner - align with login page */}
+        <div className="absolute top-6 left-6">
           <Image 
-            src="/WeColdCall_logo_dark.png" 
-            alt="WeColdCall" 
-            width={120} 
-            height={40}
-            className="h-8 w-auto"
+            src="/Logo-full-green.svg" 
+            alt="WeColdCall Logo" 
+            width={150} 
+            height={50}
+            className="w-auto"
           />
         </div>
 
-        {/* Scrollable content - same layout as register page */}
-        <div className="flex justify-center px-4 py-8">
+        {/* Centered content - align with login page */}
+        <div className="min-h-screen flex items-center justify-center px-4">
           <div className="w-full max-w-sm flex flex-col items-center">
-            {/* Header - same top margin as register page */}
-            <div className="text-center mb-8" style={{ marginTop: '90px' }}>
-              <h1 className="font-bold text-[#253053] mb-2" style={{ fontSize: '39.81px' }}>
+            {/* Header */}
+            <div className="text-center mb-8">
+              <h1 className="font-bold text-[#003333] mb-2" style={{ fontSize: '39.81px' }}>
                 Verify Your Email
               </h1>
-              <p className="font-medium text-[#253053] mb-4" style={{ fontSize: '19.2px' }}>
+              <p className="font-medium text-[#003333] mb-4" style={{ fontSize: '19.2px' }}>
                 You're in. An email has been sent to <span className="font-semibold">{email}</span>.
               </p>
-              <p className="font-medium text-[#253053]" style={{ fontSize: '19.2px' }}>
+              <p className="font-medium text-[#003333]" style={{ fontSize: '19.2px' }}>
                 Hit confirm and you'll be ready to start working.
               </p>
             </div>
 
             {/* Didn't get email section */}
             <div className="text-center mb-6">
-              <p className="font-medium text-[#253053] mb-4" style={{ fontSize: '19.2px' }}>
+              <p className="font-medium text-[#003333] mb-4" style={{ fontSize: '19.2px' }}>
                 Didn't get an email?
               </p>
               
               <Button 
                 onClick={handleResendConfirmation}
                 disabled={isResending}
-                className="text-white rounded-md font-semibold transition-colors"
+                className="text-white rounded-md font-semibold transition-colors flex items-center justify-center"
                 style={{ 
                   width: '288px', 
                   height: '50px', 
                   fontSize: '16px', 
-                  backgroundColor: '#0D8BFF' 
+                  backgroundColor: isResending ? '#B6B6B6' : '#059669' 
                 }}
                 onMouseEnter={(e) => {
                   if (!isResending) {
-                    e.currentTarget.style.backgroundColor = '#253053';
+                    e.currentTarget.style.backgroundColor = '#047857';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!isResending) {
-                    e.currentTarget.style.backgroundColor = '#0D8BFF';
+                    e.currentTarget.style.backgroundColor = '#059669';
                   }
                 }}
               >
