@@ -472,7 +472,7 @@ export default function TwilioVoiceProvider() {
     }
   }, [ensureDevice, needsEnable])
 
-  const handleAccept = useCallback(() => {
+  const handleAccept = useCallback(async () => {
     const conn = incomingConnectionRef.current
     try {
       if (conn) {
@@ -481,6 +481,31 @@ export default function TwilioVoiceProvider() {
         acceptedRef.current = true
         conn.accept()
         try { setActiveTwilioConnection(conn) } catch {}
+
+        // After accepting, attempt to capture CallSid and persist to call_history
+        try {
+          const sid = (conn as any)?.parameters?.CallSid
+          if (sid) {
+            const historyId = currentCallHistoryIdRef.current
+            if (historyId) {
+              const supabase = createSupabaseClient()
+              await supabase
+                .from('call_history')
+                .update({
+                  call_sid: sid,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', historyId)
+              console.log('✅ Saved incoming CallSid to call_history:', sid)
+            } else {
+              console.warn('⚠️ No call_history id when trying to save incoming CallSid')
+            }
+          } else {
+            console.warn('⚠️ CallSid not yet available on accepted incoming connection')
+          }
+        } catch (e) {
+          console.error('❌ Failed to persist incoming CallSid to call_history', e)
+        }
       } else {
         console.warn("Accept pressed but no incoming connection reference; hiding popup")
       }
