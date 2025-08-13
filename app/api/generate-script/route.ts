@@ -9,6 +9,16 @@ const AZURE_API_KEY = process.env.AZURE_OPENAI_API_KEY
 
 export async function POST(request: NextRequest) {
   try {
+    // Require server secret header in addition to user auth
+    const requiredSecret = process.env.API_SECRET
+    const providedSecret = request.headers.get('x-api-secret') || ''
+    if (requiredSecret && providedSecret !== requiredSecret) {
+      return NextResponse.json(
+        { error: 'Forbidden: invalid API secret' },
+        { status: 403 }
+      )
+    }
+
     // Validate required configuration
     if (!AZURE_OPENAI_ENDPOINT || !AZURE_API_KEY) {
       console.error('Azure OpenAI environment variables are missing. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in .env.local')
@@ -25,6 +35,29 @@ export async function POST(request: NextRequest) {
         { 
           error: 'Invalid Azure endpoint configured. Expected a Chat Completions endpoint with a deployment, e.g.: https://<resource>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=2025-01-01-preview' 
         },
+        { status: 500 }
+      )
+    }
+
+    // Validate Azure endpoint host (accept both Azure OpenAI and Cognitive Services unified endpoints)
+    try {
+      const u = new URL(AZURE_OPENAI_ENDPOINT)
+      const host = u.hostname
+      const isOpenAIHost = host.endsWith('.openai.azure.com')
+      const isCognitiveHost = host.endsWith('.cognitiveservices.azure.com')
+      if (!isOpenAIHost && !isCognitiveHost) {
+        console.error('Invalid Azure host. Expected *.openai.azure.com or *.cognitiveservices.azure.com, got:', host)
+        return NextResponse.json(
+          { 
+            error: 'Invalid Azure host. Use either your Azure OpenAI resource endpoint (e.g., https://<resource>.openai.azure.com/...) or the Azure Cognitive Services unified endpoint (e.g., https://<resource>.cognitiveservices.azure.com/...) with the /openai/deployments/.../chat/completions path.' 
+          },
+          { status: 500 }
+        )
+      }
+    } catch (e) {
+      console.error('Failed to parse AZURE_OPENAI_ENDPOINT URL:', AZURE_OPENAI_ENDPOINT, e)
+      return NextResponse.json(
+        { error: 'AZURE_OPENAI_ENDPOINT is not a valid URL' },
         { status: 500 }
       )
     }
@@ -175,7 +208,7 @@ Respond ONLY with valid JSON, no additional text.`
         ...fallbackScript,
         success: true,
         source: 'error_fallback',
-        error: 'API request failed, using fallback script'
+        error: `Azure API error ${response.status}: ${String(errorData).slice(0, 300)}`
       })
     }
 

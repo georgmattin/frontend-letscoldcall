@@ -422,7 +422,7 @@ export default function EditScriptPage() {
       const companyName = profile?.company_name || 'Your Company'
       const callerName = profile?.caller_name || 'Your Name'
 
-      const response = await fetch('/api/generate-script', {
+      const response = await fetch('/api/generate-script-proxy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -442,56 +442,65 @@ export default function EditScriptPage() {
 
       const scriptData = await response.json()
       
-      // Set the generated content
+      // Detect fallback responses from the API
+      const isFallback = scriptData?.source === 'error_fallback' || scriptData?.isFallback === true
       const generatedContent = scriptData.script || scriptData.content || ''
+      
+      // Set content regardless so user can see something
       setScriptContent(generatedContent)
       
       // Close AI generator modal
       setShowAIGenerator(false)
-      setAiForm({
-        productDescription: ""
-      })
+      setAiForm({ productDescription: "" })
 
       // Update usage tracking for script generation
       await updateUsage('script_generation', 1)
-      
       // Refresh package limits after usage update
       checkPackageLimits()
 
-      // Auto-save generated content immediately
-      if (scriptId) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (user) {
-            const { error: saveErr } = await supabase
-              .from('scripts')
-              .update({
-                content: generatedContent,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', scriptId)
-              .eq('user_id', user.id)
-            
-            if (saveErr) {
-              console.error('Auto-save (generated content) failed:', saveErr)
-              toast({
-                title: "Auto-save failed",
-                description: "Generated content could not be saved automatically. Please save manually.",
-                variant: "destructive"
-              })
-            } else {
-              console.log('✅ Generated content auto-saved successfully')
+      if (isFallback) {
+        console.warn('Using fallback script. API error:', scriptData?.error)
+        setAiError(scriptData?.error ? `Fallback used: ${scriptData.error}` : 'Fallback script was used due to an upstream error')
+        toast({
+          title: 'Used fallback script',
+          description: scriptData?.error || 'The AI endpoint returned an error. Showing fallback content.',
+          variant: 'destructive'
+        })
+        // Do NOT auto-save fallback content over existing user script
+      } else {
+        // Auto-save generated content immediately only for real generations
+        if (scriptId) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+              const { error: saveErr } = await supabase
+                .from('scripts')
+                .update({
+                  content: generatedContent,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', scriptId)
+                .eq('user_id', user.id)
+              if (saveErr) {
+                console.error('Auto-save (generated content) failed:', saveErr)
+                toast({
+                  title: 'Auto-save failed',
+                  description: 'Generated content could not be saved automatically. Please save manually.',
+                  variant: 'destructive'
+                })
+              } else {
+                console.log('✅ Generated content auto-saved successfully')
+              }
             }
+          } catch (autoSaveErr) {
+            console.error('Auto-save exception:', autoSaveErr)
           }
-        } catch (autoSaveErr) {
-          console.error('Auto-save exception:', autoSaveErr)
         }
+        toast({
+          title: 'Script generated!',
+          description: 'AI has successfully generated your script content.',
+        })
       }
-
-      toast({
-        title: "Script generated!",
-        description: "AI has successfully generated your script content.",
-      })
 
     } catch (err: any) {
       console.error('AI generation error:', err)
@@ -525,23 +534,20 @@ export default function EditScriptPage() {
         return
       }
 
-      const response = await fetch('/api/generate-objections', {
+      // Call secure proxy API route that injects x-api-secret server-side
+      const resp = await fetch('/api/generate-objections-proxy', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scriptContent: scriptContent,
           category: category || 'cold_outreach'
         })
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate objections')
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err?.error || 'Failed to generate objections')
       }
-
-      const data = await response.json()
+      const data = await resp.json()
       
       // Add generated objections to existing ones
       const generatedObjections = data.objections.map((obj: any, index: number) => ({

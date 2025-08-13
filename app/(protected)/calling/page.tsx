@@ -2609,7 +2609,7 @@ export default function CallingPage() {
     try {
       console.log('📝 Requesting call summary generation...')
       
-      const response = await fetch('/api/ai-analysis', {
+      const response = await fetch('/api/ai-analysis-proxy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2802,7 +2802,7 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
     try {
       console.log('🤖 Requesting AI analysis...')
       
-      const response = await fetch('/api/ai-analysis', {
+      const response = await fetch('/api/ai-analysis-proxy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

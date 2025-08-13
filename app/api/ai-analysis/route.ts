@@ -8,6 +8,16 @@ const AZURE_API_KEY = process.env.AZURE_OPENAI_API_KEY
 
 export async function POST(request: NextRequest) {
   try {
+    // Require server secret header in addition to user auth
+    const requiredSecret = process.env.API_SECRET
+    const providedSecret = request.headers.get('x-api-secret') || ''
+    if (requiredSecret && providedSecret !== requiredSecret) {
+      return NextResponse.json(
+        { error: 'Forbidden: invalid API secret' },
+        { status: 403 }
+      )
+    }
+
     // Validate required configuration
     if (!AZURE_OPENAI_ENDPOINT || !AZURE_API_KEY) {
       console.error('Azure OpenAI environment variables are missing. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in .env.local')
