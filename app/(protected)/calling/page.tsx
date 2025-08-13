@@ -20,7 +20,7 @@ import CallNotesSection from './call-notes-section'
 import IncomingCall from '../../../incoming-call'
 import ContactCard from './components/contact-card'
 import AudioSettingsModal from './components/audio-settings-modal'
-import { canPerformAction, updateUsage } from '@/lib/package-limits'
+import { canPerformAction, updateUsage, getPackageInfo } from '@/lib/package-limits'
 import { replaceScriptVariables, extractFirstName, type ScriptVariables } from '@/lib/script-utils'
 import { getLocalTimeFromPhoneNumber } from '@/lib/timezone-utils'
 import { createGoogleCalendarEvent, formatCallbackEvent, formatMeetingEvent, checkGoogleCalendarIntegration } from '@/lib/google-calendar-utils'
@@ -52,6 +52,7 @@ import {
 } from "lucide-react"
 
 import { Open_Sans } from "next/font/google"
+import { useToast } from '@/components/ui/use-toast'
 
 const openSans = Open_Sans({
   subsets: ["latin"],
@@ -87,6 +88,7 @@ type ScriptObjection = {
 export default function CallingPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { toast } = useToast()
   
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [listId, setListId] = useState<string | null>(null)
@@ -198,6 +200,29 @@ export default function CallingPage() {
       setIsAnalyticsExpanded(false)
     }
   }, [isSingleMode, isAnalyticsExpanded])
+
+  // Check active subscription/package on load
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const info = await getPackageInfo()
+        if (!cancelled && (!info || !info.hasSubscription)) {
+          toast({
+            title: 'Package required',
+            description: 'Please activate a package to use Calling.',
+            variant: 'destructive',
+          })
+          router.push('/dashboard')
+        }
+      } catch (err) {
+        console.error('Failed to verify subscription/package:', err)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [router, toast])
 
   // In single-contact mode, jump to the specific contact ID when contacts are loaded/refreshed
   useEffect(() => {
