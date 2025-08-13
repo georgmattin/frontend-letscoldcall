@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from "@/components/ui/button"
-import { Volume2 } from "lucide-react"
+import { Volume2, RefreshCw, Loader2 } from "lucide-react"
 import { Open_Sans } from 'next/font/google'
 
 // Fonts must be initialized at module scope
@@ -300,6 +300,35 @@ export default function CallNotesSection(props: CallNotesSectionProps) {
             marginBottom: '20px',
           }}
         >
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm">
+              {props.recordingError ? (
+                <span className="text-red-600">{props.recordingError}</span>
+              ) : (
+                <span className="text-[#003333]/60">Recording</span>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 py-1 text-sm border-[#003333]/10 hover:border-[#003333]/20"
+              onClick={() => props.loadCallRecording()}
+              disabled={props.isLoadingRecording}
+              title="Reload recording"
+            >
+              {props.isLoadingRecording ? (
+                <>
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  Refreshing
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-1 h-4 w-4" />
+                  Refresh
+                </>
+              )}
+            </Button>
+          </div>
           <CallRecordingToggle
             variant="plain"
             wrapper="none"
