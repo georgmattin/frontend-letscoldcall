@@ -2862,8 +2862,15 @@ export default function CallingPage() {
 
     try {
       console.log('🎵 Loading recording for call SID:', currentCallSid)
-      
-      const response = await fetch(`/api/recordings/recording/${currentCallSid}`)
+      // Use existing call-history based API route
+      if (!historyId) {
+        console.error('❌ No call history ID available to fetch recording')
+        setRecordingError('No call history ID')
+        setIsLoadingRecording(false)
+        return
+      }
+
+      const response = await fetch(`/api/call-history/${historyId}/recording`)
       
       if (response.ok) {
         const recordingData = await response.json()
