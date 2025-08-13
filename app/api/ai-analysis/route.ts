@@ -6,6 +6,27 @@ import { trackAIUsage, estimateTokens, estimateCost } from '@/lib/ai-usage-track
 const AZURE_OPENAI_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT || process.env.NEXT_PUBLIC_AZURE_OPENAI_ENDPOINT
 const AZURE_API_KEY = process.env.AZURE_OPENAI_API_KEY
 
+// Extract JSON from potential markdown code fences or extra text
+function extractJson(text: string): string {
+  if (!text) return text
+  const trimmed = text.trim()
+  // Remove markdown code fences ```json ... ``` if present
+  if (trimmed.startsWith('```')) {
+    const firstFenceEnd = trimmed.indexOf('\n')
+    const withoutFence = firstFenceEnd > -1 ? trimmed.slice(firstFenceEnd + 1) : trimmed
+    const lastFence = withoutFence.lastIndexOf('```')
+    const inner = lastFence > -1 ? withoutFence.slice(0, lastFence) : withoutFence
+    return inner.trim()
+  }
+  // Fallback: slice between first '{' and last '}'
+  const first = trimmed.indexOf('{')
+  const last = trimmed.lastIndexOf('}')
+  if (first !== -1 && last !== -1 && last > first) {
+    return trimmed.slice(first, last + 1)
+  }
+  return trimmed
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Require server secret header in addition to user auth
@@ -194,7 +215,8 @@ Respond ONLY with valid JSON, no additional text.`
 
     try {
       // Parse the JSON response from AI
-      const analysisResult = JSON.parse(aiContent)
+      const cleaned = extractJson(aiContent)
+      const analysisResult = JSON.parse(cleaned)
       
       console.log(`✅ AI ${requestType || 'analysis'} completed successfully`)
       if (requestType === 'call_summary') {
