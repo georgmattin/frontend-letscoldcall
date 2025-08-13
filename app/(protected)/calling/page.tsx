@@ -2331,7 +2331,7 @@ export default function CallingPage() {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                ai_transcript: data.transcription_text
+                transcription: data.transcription_text
               })
             })
 
@@ -2387,14 +2387,14 @@ export default function CallingPage() {
         console.log('✅ Transcription loaded from database')
         setTranscription(recordingData.transcription_text)
         
-        // Persist transcription to call_history.ai_transcript
+        // Persist transcription to call_history.transcription
         try {
           const historyId = currentCallHistoryIdRef.current || currentCallHistoryId
           if (historyId && recordingData.transcription_text) {
             await updateCallHistoryRecord(historyId, {
-              ai_transcript: recordingData.transcription_text
+              transcription: recordingData.transcription_text
             })
-            console.log('💾 Transcription saved to call_history.ai_transcript')
+            console.log('💾 Transcription saved to call_history.transcription')
           }
         } catch (e) {
           console.error('❌ Failed to save transcription to call history:', e)
@@ -2463,12 +2463,12 @@ export default function CallingPage() {
       if (currentCallHistoryId) {
         const { data: callHistory, error: historyError } = await supabase
           .from('call_history')
-          .select('ai_transcript')
+          .select('transcription')
           .eq('id', currentCallHistoryId)
           .single()
         
-        if (!historyError && callHistory?.ai_transcript) {
-          transcriptionData = callHistory.ai_transcript
+        if (!historyError && callHistory?.transcription) {
+          transcriptionData = callHistory.transcription
           console.log('✅ Found existing transcription in call_history')
         }
       }
@@ -3119,9 +3119,9 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
     try {
       if (currentCallHistoryId) {
         await updateCallHistoryRecord(currentCallHistoryId, {
-          ai_transcript: textToAnalyze
+          transcription: textToAnalyze
         })
-        console.log('💾 Ensured ai_transcript saved before AI suggestions generation')
+        console.log('💾 Ensured transcription saved before AI suggestions generation')
       }
     } catch (e) {
       console.error('❌ Failed to persist transcript before suggestions:', e)
