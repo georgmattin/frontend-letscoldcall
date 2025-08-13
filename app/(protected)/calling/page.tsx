@@ -629,6 +629,7 @@ export default function CallingPage() {
         setIsScriptCollapsed(true)
         setActiveConnection(null)
         activeConnectionRef.current = null
+        try { clearActiveConnection() } catch {}
 
         // Update call_history end fields
         const chId = currentCallHistoryIdRef.current || currentCallHistoryId
@@ -723,6 +724,7 @@ export default function CallingPage() {
         setIsScriptCollapsed(true)
         setActiveConnection(null)
         activeConnectionRef.current = null
+        try { clearActiveConnection() } catch {}
         const ch = currentCallHistoryIdRef.current || currentCallHistoryId
         if (ch) {
           const { error } = await supabase
@@ -788,6 +790,7 @@ export default function CallingPage() {
           setIsScriptCollapsed(true)
           setActiveConnection(null)
           activeConnectionRef.current = null
+          try { clearActiveConnection() } catch {}
           const ch = currentCallHistoryIdRef.current || currentCallHistoryId
           if (ch) {
             const { error } = await supabase
