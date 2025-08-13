@@ -466,10 +466,7 @@ export default function CallingPage() {
         }
       } catch {}
 
-      try { dev.on && dev.on('ready', onReady) } catch {}
-      return () => {
-        try { dev.off && dev.off('ready', onReady) } catch {}
-      }
+      // Do not re-register 'ready' inside the handler; outer scope handles listener lifecycle
     }
 
     try { dev.on && dev.on('ready', onReady) } catch {}
@@ -477,6 +474,51 @@ export default function CallingPage() {
       try { dev.off && dev.off('ready', onReady) } catch {}
     }
   }, [])
+
+  // Late hydration fallback: poll briefly after mount to detect an already-active connection
+  useEffect(() => {
+    let attempts = 0
+    const maxAttempts = 10
+    const interval = setInterval(() => {
+      attempts += 1
+      if (activeConnectionRef.current || callStarted) {
+        clearInterval(interval)
+        return
+      }
+      try {
+        const conn = getActiveConnection() || (typeof window !== 'undefined' ? (window as any).__twilioActiveConnection : null)
+        if (conn) {
+          console.log('♻️ Hydrating active connection via late poll')
+          setActiveConnection(conn)
+          activeConnectionRef.current = conn
+          setIsConnecting(false)
+          setCallStarted(true)
+          try { if (timerRef.current) { clearInterval(timerRef.current) } } catch {}
+          callDurationRef.current = callDurationRef.current || 0
+          timerRef.current = setInterval(() => {
+            callDurationRef.current += 1
+            setCallDuration(callDurationRef.current)
+          }, 1000) as unknown as NodeJS.Timeout
+          try {
+            conn.on && conn.on('disconnect', () => {
+              console.log('🔚 Remote disconnected (hydrated via late poll)')
+              try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+              setCallStarted(false)
+              setIsConnecting(false)
+              setActiveConnection(null)
+              activeConnectionRef.current = null
+              try { clearActiveConnection() } catch {}
+            })
+          } catch {}
+          clearInterval(interval)
+        }
+      } catch {}
+      if (attempts >= maxAttempts) {
+        clearInterval(interval)
+      }
+    }, 300)
+    return () => { try { clearInterval(interval) } catch {} }
+  }, [callStarted])
 
   // Attach Twilio Device incoming call listeners (works if a Device instance is exposed on window or state)
   useEffect(() => {
