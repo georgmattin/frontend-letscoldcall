@@ -550,9 +550,33 @@ export default function CallingPage() {
       setShowIncomingCall(false)
       setIncomingConnection(null)
       setIncomingCaller(null)
+      // Defensive: if we somehow had an active/started call on incoming flow, reflect end state
+      if (callStarted && !callEnded) {
+        console.log('🛡️ Cancel triggered while callStarted=true; finalizing end state')
+        try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
+        setCallStarted(false)
+        setCallEnded(true)
+        setIsScriptCollapsed(true)
+        setIsNotesCollapsed(false)
+        setActiveConnection(null)
+        activeConnectionRef.current = null
+        try { clearActiveConnection() } catch {}
+      }
     }
     const onReject = onCancel
-    const onDisconnect = onCancel
+    // Fallback: if device emits a disconnect while handling incoming flows,
+    // ensure UI reflects call end (script collapsed, notes expanded)
+    const onDisconnect = () => {
+      console.log('🔚 Device disconnect (incoming flow fallback)')
+      setShowIncomingCall(false)
+      setIncomingConnection(null)
+      setIncomingCaller(null)
+      // Reflect end state in UI just in case connection-specific handlers were missed
+      setCallStarted(false)
+      setCallEnded(true)
+      setIsScriptCollapsed(true)
+      setIsNotesCollapsed(false)
+    }
 
     device.on && device.on('incoming', onIncoming)
     device.on && device.on('cancel', onCancel)
@@ -4349,7 +4373,7 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
                 summaryUsage={summaryUsage}
                 selectedOutcome={selectedOutcome}
                 setSelectedOutcome={setSelectedOutcome}
-                readOnlyNotes={!callEnded}
+                readOnlyNotes={false}
                 callbackDate={callbackDate}
                 setCallbackDate={setCallbackDate}
                 callbackTime={callbackTime}
