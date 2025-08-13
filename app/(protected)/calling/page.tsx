@@ -455,8 +455,13 @@ export default function CallingPage() {
               existingConn.on && existingConn.on('disconnect', () => {
                 console.log('🔚 Remote disconnected (hydrated connection)')
                 try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+                const duration = callDurationRef.current || 0
+                setFinalCallDuration(duration)
                 setCallStarted(false)
+                setCallEnded(true)
                 setIsConnecting(false)
+                setIsScriptCollapsed(true)
+                setIsNotesCollapsed(false)
                 setActiveConnection(null)
                 activeConnectionRef.current = null
                 try { clearActiveConnection() } catch {}
@@ -492,8 +497,13 @@ export default function CallingPage() {
             existingConn.on && existingConn.on('disconnect', () => {
               console.log('🔚 Remote disconnected (hydrated connection on ready)')
               try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+              const duration = callDurationRef.current || 0
+              setFinalCallDuration(duration)
               setCallStarted(false)
+              setCallEnded(true)
               setIsConnecting(false)
+              setIsScriptCollapsed(true)
+              setIsNotesCollapsed(false)
               setActiveConnection(null)
               activeConnectionRef.current = null
               try { clearActiveConnection() } catch {}
@@ -539,8 +549,13 @@ export default function CallingPage() {
             conn.on && conn.on('disconnect', () => {
               console.log('🔚 Remote disconnected (hydrated via late poll)')
               try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+              const duration = callDurationRef.current || 0
+              setFinalCallDuration(duration)
               setCallStarted(false)
+              setCallEnded(true)
               setIsConnecting(false)
+              setIsScriptCollapsed(true)
+              setIsNotesCollapsed(false)
               setActiveConnection(null)
               activeConnectionRef.current = null
               try { clearActiveConnection() } catch {}
