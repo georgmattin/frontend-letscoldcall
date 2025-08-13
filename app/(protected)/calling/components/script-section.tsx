@@ -50,6 +50,7 @@ export default function ScriptSection({
 }: ScriptSectionProps) {
   const router = useRouter()
   const [createOpen, setCreateOpen] = useState(false)
+  const [selectOpen, setSelectOpen] = useState(false)
   return (
     <div 
       className={`bg-white border p-6 text-base flex flex-col overflow-hidden ${openSans.className}`}
@@ -65,12 +66,16 @@ export default function ScriptSection({
       <div className={`flex items-center gap-2 flex-none ${!isScriptCollapsed ? 'mb-6' : ''}`}>
         {/* Left: Script Selection */}
         <Select
+          open={selectOpen}
+          onOpenChange={setSelectOpen}
           value={selectedScriptId?.toString() || ""}
           onValueChange={(value) => {
             const scriptId = parseInt(value)
             if (!Number.isNaN(scriptId)) {
               onChangeScript(scriptId)
             }
+            // Close the dropdown when a value is chosen
+            setSelectOpen(false)
           }}
           disabled={loadingScripts}
         >
@@ -107,7 +112,12 @@ export default function ScriptSection({
                 <SecondaryButtonWithPlus
                   label="Create A New Script"
                   className="h-8 rounded-[12px] px-3"
-                  onClick={() => setCreateOpen(true)}
+                  onClick={() => {
+                    // Close dropdown first to avoid it remaining under the overlay
+                    setSelectOpen(false)
+                    // Open modal after closing dropdown
+                    setTimeout(() => setCreateOpen(true), 0)
+                  }}
                 />
               </div>
             )}
