@@ -208,12 +208,8 @@ export default function CallingPage() {
       try {
         const info = await getPackageInfo()
         if (!cancelled && (!info || !info.hasSubscription)) {
-          toast({
-            title: 'Package required',
-            description: 'Please activate a package to use Calling.',
-            variant: 'destructive',
-          })
-          router.push('/dashboard')
+          // Redirect with a flag; dashboard will show the toast via ShowToastOnParam
+          router.push('/dashboard?msg=package_required')
         }
       } catch (err) {
         console.error('Failed to verify subscription/package:', err)
