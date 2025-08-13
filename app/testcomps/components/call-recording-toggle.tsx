@@ -257,9 +257,36 @@ export default function CallRecordingToggle({
         {/* Right cluster: actions */}
         <div className="flex items-center gap-2">
           {hasAudio ? (
-            <a
-              href={audioSrc}
-              download
+            <button
+              type="button"
+              onClick={async () => {
+                if (!audioSrc) return
+                // Try to fetch and force a download. If blocked by CORS, fallback to opening the URL.
+                const fallback = () => {
+                  try { window.open(audioSrc, '_blank', 'noopener,noreferrer') } catch {}
+                }
+                try {
+                  const res = await fetch(audioSrc, { mode: 'cors' })
+                  if (!res.ok) { fallback(); return }
+                  const blob = await res.blob()
+                  const cd = res.headers.get('content-disposition') || ''
+                  const nameFromHeaderMatch = cd.match(/filename\*=UTF-8''([^;]+)|filename=(?:"?)([^";]+)(?:"?)/i)
+                  const decodedHeaderName = nameFromHeaderMatch ? decodeURIComponent(nameFromHeaderMatch[1] || nameFromHeaderMatch[2] || '') : ''
+                  const urlNamePart = (() => { try { const u = new URL(audioSrc); return u.pathname.split('/').pop() || '' } catch { return '' } })()
+                  const extGuess = (urlNamePart.split('.').pop() || 'mp3').toLowerCase()
+                  const filename = (decodedHeaderName || urlNamePart || `recording.${extGuess || 'mp3'}`)
+                  const objectUrl = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = objectUrl
+                  a.download = filename
+                  document.body.appendChild(a)
+                  a.click()
+                  a.remove()
+                  URL.revokeObjectURL(objectUrl)
+                } catch {
+                  fallback()
+                }
+              }}
               aria-label="Download recording"
               className="h-8 w-8 rounded-[5px] border border-[#0033331a] bg-white flex items-center justify-center text-[#003333] hover:text-emerald-600 hover:border-emerald-600 active:text-emerald-600 active:border-emerald-600"
             >
@@ -267,7 +294,7 @@ export default function CallRecordingToggle({
                 <path d="M12 3a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-4.007 4.007a1.25 1.25 0 01-1.414 0L7.28 11.707a1 1 0 111.414-1.414L11 12.586V4a1 1 0 011-1z"/>
                 <path d="M5 19a2 2 0 002 2h10a2 2 0 002-2v-1a1 1 0 10-2 0v1H7v-1a1 1 0 10-2 0v1z"/>
               </svg>
-            </a>
+            </button>
           ) : (
             <button
               type="button"
