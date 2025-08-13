@@ -269,7 +269,26 @@ export default function CallingPage() {
   const [recordingProgress, setRecordingProgress] = useState(0)
   const [recordingCurrentTime, setRecordingCurrentTime] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
-  
+
+  // Ensure we don't reuse previous call's recording state
+  const resetRecordingState = useCallback(() => {
+    try {
+      setRecordingUrl(null)
+      setRecordingAvailable(false)
+      setRecordingError(null)
+      setIsPlayingRecording(false)
+      setRecordingCurrentTime(0)
+      setRecordingDuration(0)
+      setRecordingProgress(0)
+      const audio = document.getElementById('recording-audio') as HTMLAudioElement | null
+      if (audio) {
+        try { audio.pause() } catch {}
+        audio.src = ''
+        try { audio.load() } catch {}
+      }
+    } catch {}
+  }, [])
+
   // Form states for scheduling
   const [callbackDate, setCallbackDate] = useState("")
   const [callbackTime, setCallbackTime] = useState("")
@@ -652,6 +671,8 @@ export default function CallingPage() {
     const handleConnect = async (connection: any) => {
       try {
         console.log('🔗 Twilio connect (calling page)', connection)
+        // New call connected: clear any previous recording state
+        try { resetRecordingState() } catch {}
         setActiveConnection(connection)
         activeConnectionRef.current = connection
         setCallStarted(true)
@@ -854,6 +875,8 @@ export default function CallingPage() {
     if (!incomingConnection) return
     try {
       console.log('✅ Accepting incoming call...')
+      // Clear previous recording before starting a new call
+      try { resetRecordingState() } catch {}
       incomingConnection.accept()
       setActiveConnection(incomingConnection)
       activeConnectionRef.current = incomingConnection
@@ -933,6 +956,12 @@ export default function CallingPage() {
       setIncomingConnection(null)
     }
   }, [incomingConnection])
+
+  // Reset recording state whenever the current call history id changes
+  useEffect(() => {
+    if (!currentCallHistoryId) return
+    try { resetRecordingState() } catch {}
+  }, [currentCallHistoryId, resetRecordingState])
 
   const handleIncomingReject = useCallback(() => {
     if (!incomingConnection) return
