@@ -3,9 +3,8 @@ import { headers } from 'next/headers'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
-})
+// Instantiate Stripe without hardcoding apiVersion to avoid TS literal mismatches
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
@@ -64,6 +63,21 @@ export async function POST(request: NextRequest) {
           phone_number_selection_id,
           phone_number
         } = session.metadata!
+
+        // Mark onboarding as completed on successful checkout session
+        try {
+          const { error: onboardErr } = await supabase
+            .from('profiles')
+            .update({ onboarding_status: 'yes', updated_at: new Date().toISOString() })
+            .eq('id', user_id)
+          if (onboardErr) {
+            console.error('❌ Failed to set onboarding_status yes in webhook:', onboardErr)
+          } else {
+            console.log('✅ Onboarding status set to yes for user:', user_id)
+          }
+        } catch (e) {
+          console.error('❌ Unexpected error updating onboarding status in webhook:', e)
+        }
 
         // Update phone number selection with Stripe IDs
         const updateData: any = {
@@ -315,7 +329,7 @@ export async function POST(request: NextRequest) {
         const { data: rental, error } = await supabase
           .from('rented_phone_numbers')
           .select('*')
-          .eq('stripe_subscription_id', subscriptionDeleted.id)
+          .eq('stripe_subscription_id', deletedSubscription.id)
           .single()
 
         if (rental && !error) {
@@ -337,7 +351,8 @@ export async function POST(request: NextRequest) {
       break
 
     case 'invoice.payment_failed':
-      const invoice = event.data.object as Stripe.Invoice
+      // Cast to any to access subscription field safely across Stripe type versions
+      const invoice: any = event.data.object as any
       
       console.log('Payment failed for invoice:', invoice.id)
       
