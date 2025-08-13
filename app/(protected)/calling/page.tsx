@@ -420,6 +420,14 @@ export default function CallingPage() {
   useEffect(() => {
     const device: any = (twilioDevice as any) || (typeof window !== 'undefined' && (window as any).Device)
     if (!device) return
+    // If the global provider owns incoming-call UI, skip attaching here to avoid duplicate popups
+    try {
+      const owner = (typeof window !== 'undefined' && (window as any).__twilioIncomingUIOwner) || ''
+      if (owner === 'provider') {
+        console.log('ℹ️ Skipping incoming handlers on calling page (provider owns UI)')
+        return
+      }
+    } catch {}
 
     const onIncoming = (connection: any) => {
       try {

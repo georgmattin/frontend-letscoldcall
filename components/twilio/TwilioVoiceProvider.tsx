@@ -35,6 +35,19 @@ export default function TwilioVoiceProvider() {
   const sdkReadyRef = useRef<boolean>(false)
   // Using NPM SDK, so no external script blocking
 
+  // Mark this provider as the global owner of incoming-call UI to prevent
+  // other pages from also rendering an incoming popup simultaneously.
+  useEffect(() => {
+    try { (window as any).__twilioIncomingUIOwner = 'provider' } catch {}
+    return () => {
+      try {
+        if ((window as any).__twilioIncomingUIOwner === 'provider') {
+          (window as any).__twilioIncomingUIOwner = undefined
+        }
+      } catch {}
+    }
+  }, [])
+
   const ensureDevice = useCallback(async () => {
     try {
       if (typeof window === "undefined") return null
