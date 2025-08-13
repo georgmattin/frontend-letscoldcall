@@ -3070,6 +3070,35 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
     }
   }, []) // Empty dependency array - only run on mount/unmount
 
+  // End Calling: disconnect any active call, clean up Twilio device, and redirect to dashboard
+  const handleEndCalling = useCallback(() => {
+    try {
+      if (activeConnectionRef.current) {
+        try {
+          activeConnectionRef.current.disconnect()
+          console.log('📞 Active connection disconnected via End Calling')
+        } catch (e) {
+          console.error('❌ Failed to disconnect active connection:', e)
+        }
+      }
+      if (twilioDeviceRef.current) {
+        try {
+          if (twilioDeviceRef.current.destroy) {
+            twilioDeviceRef.current.destroy()
+            console.log('🗑️ Twilio Device destroyed via End Calling')
+          } else if (twilioDeviceRef.current.disconnectAll) {
+            twilioDeviceRef.current.disconnectAll()
+            console.log('🗑️ Twilio Device disconnected via End Calling')
+          }
+        } catch (e) {
+          console.error('❌ Failed to cleanup Twilio Device:', e)
+        }
+      }
+    } finally {
+      router.push('/dashboard')
+    }
+  }, [router])
+
   // Cleanup on page unload/refresh
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -4053,7 +4082,7 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
           {/* White rectangular box (extracted to reusable component) */}
           <CallAnalyticsToggle
             title={contactList?.name || 'Loading...'}
-            onEndClick={() => setShowSessionSummary(true)}
+            onEndClick={handleEndCalling}
             isExpanded={isAnalyticsExpanded}
             onChangeExpanded={(next) => setIsAnalyticsExpanded(next)}
             onExpand={async () => {
