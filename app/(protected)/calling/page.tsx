@@ -627,6 +627,8 @@ export default function CallingPage() {
         setCallEnded(true)
         // Collapse script section after call ends (matches list-calling UX)
         setIsScriptCollapsed(true)
+        // Ensure notes section is expanded and usable after call ends
+        setIsNotesCollapsed(false)
         setActiveConnection(null)
         activeConnectionRef.current = null
         try { clearActiveConnection() } catch {}
@@ -722,6 +724,8 @@ export default function CallingPage() {
         setCallStarted(false)
         setCallEnded(true)
         setIsScriptCollapsed(true)
+        // Ensure notes section is expanded and usable after call ends (hydrated)
+        setIsNotesCollapsed(false)
         setActiveConnection(null)
         activeConnectionRef.current = null
         try { clearActiveConnection() } catch {}
@@ -788,6 +792,8 @@ export default function CallingPage() {
           setCallStarted(false)
           setCallEnded(true)
           setIsScriptCollapsed(true)
+          // Ensure notes section is expanded and usable after call ends (incoming accepted)
+          setIsNotesCollapsed(false)
           setActiveConnection(null)
           activeConnectionRef.current = null
           try { clearActiveConnection() } catch {}
@@ -4343,6 +4349,7 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
                 summaryUsage={summaryUsage}
                 selectedOutcome={selectedOutcome}
                 setSelectedOutcome={setSelectedOutcome}
+                readOnlyNotes={!callEnded}
                 callbackDate={callbackDate}
                 setCallbackDate={setCallbackDate}
                 callbackTime={callbackTime}
