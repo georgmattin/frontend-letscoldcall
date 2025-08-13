@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -337,6 +337,42 @@ export default function CallingPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const callDurationRef = useRef<number>(0)
 
+  // Watchdog: if a call is started but we lose the active connection or it closes without firing events,
+  // force the UI into the ended state so sections react properly (helps especially for incoming calls)
+  useEffect(() => {
+    if (!callStarted || callEnded) return
+    let ticksWithoutConn = 0
+    const id = setInterval(() => {
+      try {
+        const conn = activeConnectionRef.current as any
+        const status = typeof conn?.status === 'function' ? conn.status() : undefined
+        const isClosed = status === 'closed' || status === 'disconnected' || status === 'pending' || status === undefined
+        const noConn = !conn
+        if (noConn || isClosed) {
+          ticksWithoutConn += 1
+        } else {
+          ticksWithoutConn = 0
+        }
+        if (ticksWithoutConn >= 2) { // ~2 seconds without a live connection
+          console.log('🧭 Watchdog: forcing UI to call-ended state')
+          try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
+          const duration = callDurationRef.current || 0
+          setFinalCallDuration(duration)
+          setCallStarted(false)
+          setCallEnded(true)
+          setIsScriptCollapsed(true)
+          setIsNotesCollapsed(false)
+          setActiveConnection(null)
+          activeConnectionRef.current = null
+          try { clearActiveConnection() } catch {}
+        }
+      } catch (e) {
+        console.warn('Watchdog error', e)
+      }
+    }, 1000)
+    return () => clearInterval(id)
+  }, [callStarted, callEnded])
+
   // Calling statistics
   const [sessionStats, setSessionStats] = useState({
     totalContacts: 0,
@@ -639,7 +675,20 @@ export default function CallingPage() {
 
     const handleDisconnect = async (_connection: any) => {
       try {
-        if (callEndHandledRef.current) return
+        if (callEndHandledRef.current) {
+          console.log('🔁 Disconnect received but already handled – forcing UI sync')
+          try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
+          const duration = callDurationRef.current || 0
+          setFinalCallDuration(duration)
+          setCallStarted(false)
+          setCallEnded(true)
+          setIsScriptCollapsed(true)
+          setIsNotesCollapsed(false)
+          setActiveConnection(null)
+          activeConnectionRef.current = null
+          try { clearActiveConnection() } catch {}
+          return
+        }
         callEndHandledRef.current = true
         console.log('🔚 Twilio disconnect (calling page)')
 
@@ -739,7 +788,20 @@ export default function CallingPage() {
     // Ensure disconnect updates state and DB
     const handleHydratedDisconnect = async () => {
       try {
-        if (callEndHandledRef.current) return
+        if (callEndHandledRef.current) {
+          console.log('🔁 Hydrated disconnect received but already handled – forcing UI sync')
+          try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
+          const duration = callDurationRef.current || 0
+          setFinalCallDuration(duration)
+          setCallStarted(false)
+          setCallEnded(true)
+          setIsScriptCollapsed(true)
+          setIsNotesCollapsed(false)
+          setActiveConnection(null)
+          activeConnectionRef.current = null
+          try { clearActiveConnection() } catch {}
+          return
+        }
         callEndHandledRef.current = true
         console.log('🔚 Hydrated connection disconnected')
         try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
@@ -807,7 +869,20 @@ export default function CallingPage() {
       // Attach disconnect listener directly to this connection to ensure UI sync
       const handleConnDisconnect = async () => {
         try {
-          if (callEndHandledRef.current) return
+          if (callEndHandledRef.current) {
+            console.log('🔁 Incoming-conn disconnect received but already handled – forcing UI sync')
+            try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
+            const duration = callDurationRef.current || 0
+            setFinalCallDuration(duration)
+            setCallStarted(false)
+            setCallEnded(true)
+            setIsScriptCollapsed(true)
+            setIsNotesCollapsed(false)
+            setActiveConnection(null)
+            activeConnectionRef.current = null
+            try { clearActiveConnection() } catch {}
+            return
+          }
           callEndHandledRef.current = true
           console.log('🔚 Incoming accepted connection disconnected')
           try { if (timerRef.current) clearInterval(timerRef.current) } catch {}
