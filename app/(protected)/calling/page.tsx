@@ -1701,13 +1701,18 @@ export default function CallingPage() {
           .select('is_active, google_email')
           .eq('user_id', user.id)
           .eq('is_active', true)
-          .single()
+          .maybeSingle()
         
-        setHasGoogleCalendarIntegration(!!googleIntegration)
-        if (googleIntegration?.google_email) {
+        const hasIntegration = !!googleIntegration
+        setHasGoogleCalendarIntegration(hasIntegration)
+        if (hasIntegration && googleIntegration.google_email) {
           setGoogleCalendarEmail(googleIntegration.google_email)
         }
-        console.log('📅 Google Calendar integration:', !!googleIntegration)
+        console.log(
+          hasIntegration
+            ? '📅 Google Calendar integration: true'
+            : '📅 No active Google Calendar integration found'
+        )
 
         // Check transcription and AI suggestions usage and limits
         await checkTranscriptionUsage()
