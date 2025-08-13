@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Edit } from "lucide-react"
@@ -8,6 +8,7 @@ import { replaceScriptVariables } from '@/lib/script-utils'
 import { Open_Sans } from 'next/font/google'
 import { useRouter } from 'next/navigation'
 import SecondaryButtonWithPlus from '../../../testcomps/components/secondary-button-with-plus'
+import CreateAScriptPopup from '../../../testcomps/components/create-a-script-popup'
 
 const openSans = Open_Sans({ subsets: ['latin'] })
 
@@ -48,6 +49,7 @@ export default function ScriptSection({
   scriptObjections,
 }: ScriptSectionProps) {
   const router = useRouter()
+  const [createOpen, setCreateOpen] = useState(false)
   return (
     <div 
       className={`bg-white border p-6 text-base flex flex-col overflow-hidden ${openSans.className}`}
@@ -105,7 +107,7 @@ export default function ScriptSection({
                 <SecondaryButtonWithPlus
                   label="Create A New Script"
                   className="h-8 rounded-[12px] px-3"
-                  onClick={() => router.push('/scripts/create-script')}
+                  onClick={() => setCreateOpen(true)}
                 />
               </div>
             )}
@@ -223,6 +225,22 @@ export default function ScriptSection({
               )}
             </div>
           )}
+        </div>
+      )}
+      {/* Create Script Modal */}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" aria-modal="true" role="dialog">
+          <div className="absolute inset-0 bg-[#003333]/60 backdrop-blur-sm" onClick={() => setCreateOpen(false)} />
+          <div className="relative z-10 mx-4">
+            <CreateAScriptPopup
+              onCreated={(s) => {
+                setCreateOpen(false)
+                if (s?.id) {
+                  router.push(`/scripts/edit-script/${s.id}`)
+                }
+              }}
+            />
+          </div>
         </div>
       )}
     </div>
