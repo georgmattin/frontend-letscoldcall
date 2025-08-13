@@ -3153,13 +3153,37 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
           setAiSuggestions(result.suggestions)
           
           // Save AI suggestions to call history
-          if (currentCallHistoryId) {
+          const historyId = currentCallHistoryIdRef.current || currentCallHistoryId
+          if (historyId) {
             console.log('💾 Saving AI suggestions to call history...')
-            await updateCallHistoryRecord(currentCallHistoryId, {
+            const success = await updateCallHistoryRecord(historyId, {
               ai_suggestions: result.suggestions,
-              ai_suggestions_generated_at: new Date().toISOString()
+              ai_analysis_generated_at: new Date().toISOString()
             })
-            console.log('✅ AI suggestions saved to call history')
+            if (!success) {
+              console.warn('⚠️ Client update failed, attempting API PATCH fallback for AI suggestions...')
+              try {
+                const resp = await fetch(`/api/call-history/${historyId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    ai_suggestions: result.suggestions,
+                    ai_analysis_generated_at: new Date().toISOString()
+                  })
+                })
+                if (resp.ok) {
+                  console.log('✅ AI suggestions saved via API PATCH')
+                } else {
+                  console.error('❌ API PATCH failed to save AI suggestions')
+                }
+              } catch (e) {
+                console.error('❌ Error calling API PATCH for AI suggestions:', e)
+              }
+            } else {
+              console.log('✅ AI suggestions saved to call history')
+            }
+          } else {
+            console.warn('⚠️ No call history id available; cannot save AI suggestions')
           }
         }
         
