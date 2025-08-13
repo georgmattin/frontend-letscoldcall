@@ -270,9 +270,19 @@ export default function CallingPage() {
   const [recordingCurrentTime, setRecordingCurrentTime] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
 
+  // Track which ended call's recording we intend to show and any pending loader timeout
+  const focusedEndedCallSidRef = useRef<string | null>(null)
+  const postCallLoadTimeoutRef = useRef<number | null>(null)
+
   // Ensure we don't reuse previous call's recording state
   const resetRecordingState = useCallback(() => {
     try {
+      // Cancel any pending post-call recording load
+      if (postCallLoadTimeoutRef.current) {
+        clearTimeout(postCallLoadTimeoutRef.current)
+        postCallLoadTimeoutRef.current = null
+      }
+      focusedEndedCallSidRef.current = null
       setRecordingUrl(null)
       setRecordingAvailable(false)
       setRecordingError(null)
@@ -2797,10 +2807,10 @@ export default function CallingPage() {
     }
   }
 
-  // Load recording for current call (based on original implementation)
-  const loadCallRecording = async () => {
+  // Load recording for a specific call (or fallback to current state/history)
+  const loadCallRecording = async (requestedCallSid?: string) => {
     // Try to get call_sid from multiple sources
-    let currentCallSid = callSid
+    let currentCallSid = requestedCallSid || callSid
 
     // If callSid from state is null, try to get it from call history
     const historyId = currentCallHistoryIdRef.current || currentCallHistoryId
@@ -2844,6 +2854,11 @@ export default function CallingPage() {
       
       if (response.ok) {
         const recordingData = await response.json()
+        // Only apply if we're still focused on this ended call's recording
+        if (focusedEndedCallSidRef.current && focusedEndedCallSidRef.current !== currentCallSid) {
+          console.log('⏭️ Skipping recording apply; focus moved to different callSid:', focusedEndedCallSidRef.current)
+          return
+        }
         setRecordingUrl(recordingData.recording_url)
         setRecordingAvailable(true)
         console.log('✅ Recording loaded successfully:', recordingData.recording_sid)
@@ -4202,8 +4217,12 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
       }
       
       // Load recording and transcription with delay to allow Twilio processing
-      setTimeout(() => {
-        loadCallRecording()
+      if (postCallLoadTimeoutRef.current) {
+        clearTimeout(postCallLoadTimeoutRef.current)
+      }
+      focusedEndedCallSidRef.current = finalCallSid
+      postCallLoadTimeoutRef.current = window.setTimeout(() => {
+        loadCallRecording(finalCallSid)
         
         // Check transcription status after call ends
         checkInitialTranscriptionStatus(finalCallSid)
