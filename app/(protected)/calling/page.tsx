@@ -53,6 +53,7 @@ import {
 
 import { Open_Sans } from "next/font/google"
 import { useToast } from '@/components/ui/use-toast'
+import { getActiveConnection, clearActiveConnection } from '@/components/twilio/connectionStore'
 
 const openSans = Open_Sans({
   subsets: ["latin"],
@@ -399,6 +400,34 @@ export default function CallingPage() {
         setTwilioDevice(dev)
         twilioDeviceRef.current = dev
         setTwilioError(null)
+        // Try to hydrate any existing accepted connection immediately
+        try {
+          const existingConn = getActiveConnection()
+          if (existingConn && !activeConnectionRef.current) {
+            console.log('♻️ Hydrating accepted incoming call after redirect')
+            setActiveConnection(existingConn)
+            activeConnectionRef.current = existingConn
+            setIsConnecting(false)
+            setCallStarted(true)
+            try { if (timerRef.current) { clearInterval(timerRef.current) } } catch {}
+            callDurationRef.current = callDurationRef.current || 0
+            timerRef.current = setInterval(() => {
+              callDurationRef.current += 1
+              setCallDuration(callDurationRef.current)
+            }, 1000) as unknown as NodeJS.Timeout
+            try {
+              existingConn.on && existingConn.on('disconnect', () => {
+                console.log('🔚 Remote disconnected (hydrated connection)')
+                try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+                setCallStarted(false)
+                setIsConnecting(false)
+                setActiveConnection(null)
+                activeConnectionRef.current = null
+                try { clearActiveConnection() } catch {}
+              })
+            } catch (e) { console.warn('Failed to bind disconnect on hydrated connection', e) }
+          }
+        } catch (e) { console.warn('Hydration check for existing Twilio connection failed', e) }
       }
     } catch {}
 
@@ -408,6 +437,39 @@ export default function CallingPage() {
       twilioDeviceRef.current = dev
       setTwilioError(null)
       console.log('🔉 Twilio Device ready (calling page)')
+      // Attempt hydration on ready as well
+      try {
+        const existingConn = getActiveConnection()
+        if (existingConn && !activeConnectionRef.current) {
+          console.log('♻️ Hydrating accepted incoming call after device ready')
+          setActiveConnection(existingConn)
+          activeConnectionRef.current = existingConn
+          setIsConnecting(false)
+          setCallStarted(true)
+          try { if (timerRef.current) { clearInterval(timerRef.current) } } catch {}
+          callDurationRef.current = callDurationRef.current || 0
+          timerRef.current = setInterval(() => {
+            callDurationRef.current += 1
+            setCallDuration(callDurationRef.current)
+          }, 1000) as unknown as NodeJS.Timeout
+          try {
+            existingConn.on && existingConn.on('disconnect', () => {
+              console.log('🔚 Remote disconnected (hydrated connection on ready)')
+              try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+              setCallStarted(false)
+              setIsConnecting(false)
+              setActiveConnection(null)
+              activeConnectionRef.current = null
+              try { clearActiveConnection() } catch {}
+            })
+          } catch {}
+        }
+      } catch {}
+
+      try { dev.on && dev.on('ready', onReady) } catch {}
+      return () => {
+        try { dev.off && dev.off('ready', onReady) } catch {}
+      }
     }
 
     try { dev.on && dev.on('ready', onReady) } catch {}
