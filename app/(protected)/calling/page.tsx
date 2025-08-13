@@ -2331,7 +2331,7 @@ export default function CallingPage() {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                transcription: data.transcription_text
+                ai_transcript: data.transcription_text
               })
             })
 
@@ -2386,6 +2386,19 @@ export default function CallingPage() {
       if (recordingData?.transcription_text) {
         console.log('✅ Transcription loaded from database')
         setTranscription(recordingData.transcription_text)
+        
+        // Persist transcription to call_history.ai_transcript
+        try {
+          const historyId = currentCallHistoryIdRef.current || currentCallHistoryId
+          if (historyId && recordingData.transcription_text) {
+            await updateCallHistoryRecord(historyId, {
+              ai_transcript: recordingData.transcription_text
+            })
+            console.log('💾 Transcription saved to call_history.ai_transcript')
+          }
+        } catch (e) {
+          console.error('❌ Failed to save transcription to call history:', e)
+        }
         
         // Add usage tracking
         console.log('📊 Adding usage tracking for transcription generation...')
@@ -3100,6 +3113,18 @@ ERROR: Could not generate AI summary - manual review of transcription recommende
     if (!textToAnalyze || textToAnalyze.trim() === '') {
       console.log('❌ No transcription available for AI analysis')
       return
+    }
+
+    // Ensure transcription is saved to call_history before generating suggestions
+    try {
+      if (currentCallHistoryId) {
+        await updateCallHistoryRecord(currentCallHistoryId, {
+          ai_transcript: textToAnalyze
+        })
+        console.log('💾 Ensured ai_transcript saved before AI suggestions generation')
+      }
+    } catch (e) {
+      console.error('❌ Failed to persist transcript before suggestions:', e)
     }
 
     setIsLoadingAISuggestions(true)
