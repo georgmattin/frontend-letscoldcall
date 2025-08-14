@@ -283,38 +283,143 @@ export async function POST(request: NextRequest) {
       break
 
     case 'customer.subscription.updated':
-      const updatedSubscription = event.data.object as Stripe.Subscription
-      console.log('Subscription updated:', updatedSubscription.id, 'Status:', updatedSubscription.status)
-      
-      try {
-        // Update rental status based on subscription status
-        const { data: rental, error } = await supabase
-          .from('rented_phone_numbers')
-          .select('*')
-          .eq('stripe_subscription_id', updatedSubscription.id)
-          .single()
+      {
+        const subscriptionUpdated = event.data.object as Stripe.Subscription
+        console.log('🔄 Subscription updated:', subscriptionUpdated.id, 'Status:', subscriptionUpdated.status)
 
-        if (rental && !error) {
-          let rentalStatus = 'active'
-          
-          if (updatedSubscription.status === 'canceled' || 
-              updatedSubscription.status === 'unpaid' ||
-              updatedSubscription.status === 'past_due') {
-            rentalStatus = 'suspended'
+        // Helper: derive Stripe plan identifiers
+        const firstItem = subscriptionUpdated.items?.data?.[0]
+        const priceId = firstItem?.price?.id
+        const priceNickname = firstItem?.price?.nickname as string | undefined
+        const productField = firstItem?.price?.product as string | Stripe.Product | undefined
+        const productId = typeof productField === 'string' ? productField : productField?.id
+
+        // Convert Stripe period times to ISO (cast for SDK typing differences)
+        const subAny: any = subscriptionUpdated
+        const periodStartIso = subAny.current_period_start
+          ? new Date(subAny.current_period_start * 1000).toISOString()
+          : undefined
+        const periodEndIso = subAny.current_period_end
+          ? new Date(subAny.current_period_end * 1000).toISOString()
+          : undefined
+
+        try {
+          // 1) Update rental status based on subscription status
+          try {
+            const { data: rental } = await supabase
+              .from('rented_phone_numbers')
+              .select('*')
+              .eq('stripe_subscription_id', subscriptionUpdated.id)
+              .single()
+
+            if (rental) {
+              let rentalStatus = 'active'
+              if (
+                subscriptionUpdated.status === 'canceled' ||
+                subscriptionUpdated.status === 'unpaid' ||
+                subscriptionUpdated.status === 'past_due'
+              ) {
+                rentalStatus = 'suspended'
+              }
+
+              await supabase
+                .from('rented_phone_numbers')
+                .update({
+                  rental_status: rentalStatus,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', rental.id)
+
+              console.log('📞 Rental status set to', rentalStatus)
+            }
+          } catch (e) {
+            console.error('❌ Rental status update error:', e)
           }
 
-          await supabase
-            .from('rented_phone_numbers')
-            .update({
-              rental_status: rentalStatus,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', rental.id)
+          // 2) Map Stripe plan -> internal package_types.id
+          let mappedPackageId: number | null = null
+          try {
+            // Try by stripe_price_id
+            if (priceId) {
+              const { data: pkgByPrice, error: pkgPriceErr } = await supabase
+                .from('package_types')
+                .select('id, package_name, stripe_price_id, stripe_product_id')
+                .eq('stripe_price_id', priceId)
+                .single()
+              if (!pkgPriceErr && pkgByPrice) {
+                mappedPackageId = pkgByPrice.id
+              }
+            }
+            // Try by stripe_product_id
+            if (!mappedPackageId && productId) {
+              const { data: pkgByProduct, error: pkgProdErr } = await supabase
+                .from('package_types')
+                .select('id, package_name, stripe_price_id, stripe_product_id')
+                .eq('stripe_product_id', productId)
+                .single()
+              if (!pkgProdErr && pkgByProduct) {
+                mappedPackageId = pkgByProduct.id
+              }
+            }
+            // Fallback by package_name matching price nickname
+            if (!mappedPackageId && priceNickname) {
+              const { data: pkgByName, error: pkgNameErr } = await supabase
+                .from('package_types')
+                .select('id, package_name')
+                .eq('package_name', priceNickname)
+                .single()
+              if (!pkgNameErr && pkgByName) {
+                mappedPackageId = pkgByName.id
+              }
+            }
+          } catch (mapErr) {
+            console.error('❌ Package mapping error:', mapErr)
+          }
 
-          console.log('Rental status updated to:', rentalStatus, 'for subscription:', updatedSubscription.id)
+          // 3) Update user_subscriptions row for this Stripe subscription
+          try {
+            const updateFields: any = {
+              status: subscriptionUpdated.status, // keep raw Stripe status for transparency
+              updated_at: new Date().toISOString()
+            }
+
+            if (typeof subscriptionUpdated.cancel_at_period_end === 'boolean') {
+              updateFields.cancel_at_period_end = subscriptionUpdated.cancel_at_period_end
+              updateFields.canceled_at = subscriptionUpdated.cancel_at_period_end ? new Date().toISOString() : null
+            }
+
+            if (periodStartIso && periodEndIso) {
+              updateFields.subscription_start_date = periodStartIso
+              updateFields.subscription_end_date = periodEndIso
+              updateFields.billing_cycle_start = periodStartIso.split('T')[0]
+              updateFields.billing_cycle_end = periodEndIso.split('T')[0]
+            }
+
+            if (mappedPackageId) {
+              updateFields.package_id = mappedPackageId
+            }
+
+            const { error: subUpdErr } = await supabase
+              .from('user_subscriptions')
+              .update(updateFields)
+              .eq('stripe_subscription_id', subscriptionUpdated.id)
+
+            if (subUpdErr) {
+              console.error('❌ user_subscriptions update failed:', subUpdErr)
+            } else {
+              console.log('✅ user_subscriptions synced with Stripe subscription update')
+            }
+          } catch (subErr) {
+            console.error('❌ Error syncing user_subscriptions:', subErr)
+          }
+
+          // 4) Reactivation case (cancel_at_period_end turned off and status active)
+          if (!subscriptionUpdated.cancel_at_period_end && subscriptionUpdated.status === 'active') {
+            console.log('✅ Subscription active and not set to cancel at period end')
+          }
+        } catch (error) {
+          console.error('❌ Error handling subscription update:', error)
         }
-      } catch (error) {
-        console.error('Error handling subscription update:', error)
       }
       break
 
@@ -383,53 +488,43 @@ export async function POST(request: NextRequest) {
       }
       break
 
-    case 'customer.subscription.updated':
-      const subscriptionUpdated = event.data.object as Stripe.Subscription
-      console.log('🔄 Subscription updated:', subscriptionUpdated.id)
-      
-      try {
-        // Check if subscription is set to cancel at period end
-        if (subscriptionUpdated.cancel_at_period_end) {
-          console.log('⚠️ Subscription set to cancel at period end:', subscriptionUpdated.id)
-          
-          // Update user_subscriptions table
-          const { error: updateError } = await supabase
-            .from('user_subscriptions')
-            .update({
-              cancel_at_period_end: true,
-              canceled_at: new Date().toISOString(),
-              status: 'active', // Still active until period end
-              updated_at: new Date().toISOString()
-            })
-            .eq('stripe_subscription_id', subscriptionUpdated.id)
-          
-          if (updateError) {
-            console.error('❌ Error updating subscription cancellation:', updateError)
-          } else {
-            console.log('✅ Subscription marked for cancellation at period end')
+    
+    case 'invoice.payment_succeeded':
+      {
+        // Cast for compatibility across Stripe versions
+        const invoiceAny: any = event.data.object as any
+        console.log('✅ Invoice payment succeeded:', invoiceAny.id)
+        try {
+          // Resume rental if any
+          if (invoiceAny.subscription) {
+            const subId = typeof invoiceAny.subscription === 'string' ? invoiceAny.subscription : invoiceAny.subscription?.id
+            if (subId) {
+              const { data: rental } = await supabase
+                .from('rented_phone_numbers')
+                .select('*')
+                .eq('stripe_subscription_id', subId)
+                .single()
+              if (rental) {
+                await supabase
+                  .from('rented_phone_numbers')
+                  .update({ rental_status: 'active', updated_at: new Date().toISOString() })
+                  .eq('id', rental.id)
+                console.log('📞 Rental reactivated after successful payment')
+              }
+
+              // Ensure user_subscriptions is active
+              const { error: usErr } = await supabase
+                .from('user_subscriptions')
+                .update({ status: 'active', updated_at: new Date().toISOString() })
+                .eq('stripe_subscription_id', subId)
+              if (usErr) {
+                console.error('❌ Failed to mark user_subscriptions active:', usErr)
+              }
+            }
           }
-        } else if (!subscriptionUpdated.cancel_at_period_end && subscriptionUpdated.status === 'active') {
-          // Subscription was reactivated
-          console.log('✅ Subscription reactivated:', subscriptionUpdated.id)
-          
-          const { error: reactivateError } = await supabase
-            .from('user_subscriptions')
-            .update({
-              cancel_at_period_end: false,
-              canceled_at: null,
-              status: 'active',
-              updated_at: new Date().toISOString()
-            })
-            .eq('stripe_subscription_id', subscriptionUpdated.id)
-          
-          if (reactivateError) {
-            console.error('❌ Error reactivating subscription:', reactivateError)
-          } else {
-            console.log('✅ Subscription reactivated successfully')
-          }
+        } catch (e) {
+          console.error('❌ Error handling payment success:', e)
         }
-      } catch (error) {
-        console.error('❌ Error handling subscription update:', error)
       }
       break
 
