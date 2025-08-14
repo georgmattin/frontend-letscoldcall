@@ -37,19 +37,10 @@ export default async function ProtectedLayout({ children }: { children: ReactNod
 
     // If we are rendering the onboarding page, skip the onboarding gate
     if (typeof currentPath === 'string' && currentPath.includes('/onboarding')) {
+      // Render a minimal wrapper (no Navbar/Footer/Twilio) so onboarding has its own layout
       return (
-        <div className="min-h-screen flex flex-col bg-white">
-          {/* Twilio SDK is now imported via NPM inside TwilioVoiceProvider */}
-          {/* Global Twilio Voice Provider for all protected routes */}
-          <TwilioVoiceProvider />
-          {/* Top navigation */}
-          <Navbar />
-          {/* Page content */}
-          <main className="flex-1 w-full bg-[#F4F6F6]">
-            {children}
-          </main>
-          {/* Footer */}
-          <MainFooter />
+        <div className="min-h-screen w-full bg-[#111315] text-white">
+          {children}
         </div>
       )
     }
