@@ -718,6 +718,8 @@ export default function MyAccountPage() {
   const handleEditSubscription = async () => {
     if (!user || !subscription?.stripe_customer_id) return
 
+    // Open a tab synchronously to avoid popup blockers
+    const portalTab = window.open('about:blank')
     setCustomerPortalLoading(true)
     try {
       const response = await fetch('/api/stripe/customer-portal', {
@@ -736,11 +738,18 @@ export default function MyAccountPage() {
       }
 
       const { url } = await response.json()
-      // Open in new tab
-      window.open(url, '_blank')
+      if (portalTab) {
+        portalTab.location.href = url
+      } else {
+        // Fallback: navigate current tab if popup blocked
+        window.location.href = url
+      }
     } catch (error: any) {
       console.error('Error opening customer portal:', error)
-      alert('Error opening customer portal: ' + error.message)
+      if (portalTab && !portalTab.closed) {
+        portalTab.close()
+      }
+      alert('Error opening customer portal: ' + (error?.message || 'Unknown error'))
     } finally {
       setCustomerPortalLoading(false)
     }
