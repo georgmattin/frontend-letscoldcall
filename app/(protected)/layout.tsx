@@ -36,30 +36,24 @@ export default async function ProtectedLayout({ children }: { children: ReactNod
       ''
 
     // If we are rendering the onboarding page, skip the onboarding gate
-    if (typeof currentPath === 'string' && currentPath.includes('/onboarding')) {
-      // Render a minimal wrapper (no Navbar/Footer/Twilio) so onboarding has its own layout
-      // Do NOT force colors here; let the onboarding page define its own theme
-      return (
-        <div className="min-h-screen w-full">
-          {children}
-        </div>
-      )
-    }
+    const isOnboardingRoute = typeof currentPath === 'string' && currentPath.includes('/onboarding')
 
-    const userId = session.user.id
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('onboarding_status')
-      .eq('id', userId)
-      .maybeSingle()
+    if (!isOnboardingRoute) {
+      const userId = session.user.id
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('onboarding_status')
+        .eq('id', userId)
+        .maybeSingle()
 
-    const status = profile?.onboarding_status
-    if (profileError) {
-      console.error('Failed to fetch profile in protected layout:', profileError.message)
-    }
-    // Treat missing profile or any non-'yes' value as not onboarded
-    if (status !== 'yes') {
-      redirect('/onboarding')
+      const status = profile?.onboarding_status
+      if (profileError) {
+        console.error('Failed to fetch profile in protected layout:', profileError.message)
+      }
+      // Treat missing profile or any non-'yes' value as not onboarded
+      if (status !== 'yes') {
+        redirect('/onboarding')
+      }
     }
   } catch (e) {
     console.error('Unexpected error checking onboarding status:', e)
