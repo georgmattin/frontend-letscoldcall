@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import type { ReactNode } from 'react'
 import { createClient } from '@/utils/supabase/server'
 import Navbar from '@/app/testcomps/components/navbar'
@@ -26,6 +27,33 @@ export default async function ProtectedLayout({ children }: { children: ReactNod
 
   // Centralized onboarding gate for all protected routes
   try {
+    // Detect current path to avoid redirect loop on the onboarding page itself
+    const h = await headers()
+    const currentPath =
+      h.get('x-invoke-path') ||
+      h.get('x-matched-path') ||
+      h.get('next-url') ||
+      ''
+
+    // If we are rendering the onboarding page, skip the onboarding gate
+    if (typeof currentPath === 'string' && currentPath.includes('/onboarding')) {
+      return (
+        <div className="min-h-screen flex flex-col bg-white">
+          {/* Twilio SDK is now imported via NPM inside TwilioVoiceProvider */}
+          {/* Global Twilio Voice Provider for all protected routes */}
+          <TwilioVoiceProvider />
+          {/* Top navigation */}
+          <Navbar />
+          {/* Page content */}
+          <main className="flex-1 w-full bg-[#F4F6F6]">
+            {children}
+          </main>
+          {/* Footer */}
+          <MainFooter />
+        </div>
+      )
+    }
+
     const userId = session.user.id
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
