@@ -260,6 +260,24 @@ export default function OnboardingPage() {
         }
 
         setUser(session.user)
+        // If user already completed onboarding, send to dashboard immediately
+        try {
+          const { data: profile, error: profileErr } = await supabase
+            .from('profiles')
+            .select('onboarding_status')
+            .eq('id', session.user.id)
+            .maybeSingle()
+          const done = (profile?.onboarding_status || '').toLowerCase() === 'yes'
+          if (done) {
+            router.replace('/dashboard')
+            return
+          }
+          if (profileErr) {
+            console.warn('Failed to fetch onboarding_status on onboarding page:', profileErr.message)
+          }
+        } catch (e) {
+          console.warn('Unexpected error checking onboarding_status on onboarding page:', e)
+        }
         // Load persisted onboarding progress for this user
         try {
           const { data: progress } = await supabase
