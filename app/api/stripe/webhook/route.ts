@@ -56,13 +56,13 @@ export async function POST(request: NextRequest) {
 
       try {
         // Get the metadata from the session
-        const {
-          user_id,
-          package_id,
-          package_name,
-          phone_number_selection_id,
-          phone_number
-        } = session.metadata!
+        const meta = session.metadata || {}
+        const user_id = meta.user_id as string
+        const package_id = meta.package_id as string
+        const package_name = meta.package_name as string | undefined
+        const phone_number_selection_id = meta.phone_number_selection_id as string | undefined
+        const phone_number = meta.phone_number as string | undefined
+        const flow_type = meta.flow_type as string | undefined
 
         // Mark onboarding as completed on successful checkout session
         try {
@@ -79,54 +79,64 @@ export async function POST(request: NextRequest) {
           console.error('❌ Unexpected error updating onboarding status in webhook:', e)
         }
 
-        // Update phone number selection with Stripe IDs
-        const updateData: any = {
-          status: 'paid',
-          stripe_session_id: session.id,
-          updated_at: new Date().toISOString()
-        }
+        // If user selected own Twilio flow, skip phone number selection updates
+        let updateData: any = {}
+        if (flow_type !== 'own_twilio' && phone_number_selection_id) {
+          // Update phone number selection with Stripe IDs
+          updateData = {
+            status: 'paid',
+            stripe_session_id: session.id,
+            updated_at: new Date().toISOString()
+          }
 
-        // Add customer ID if available
-        if (session.customer) {
-          updateData.stripe_customer_id = typeof session.customer === 'string' 
-            ? session.customer 
-            : session.customer.id
-        }
+          // Add customer ID if available
+          if (session.customer) {
+            updateData.stripe_customer_id = typeof session.customer === 'string' 
+              ? session.customer 
+              : session.customer.id
+          }
 
-        // Add subscription ID if available
-        if (session.subscription) {
-          updateData.stripe_subscription_id = typeof session.subscription === 'string'
-            ? session.subscription
-            : session.subscription.id
-        }
+          // Add subscription ID if available
+          if (session.subscription) {
+            updateData.stripe_subscription_id = typeof session.subscription === 'string'
+              ? session.subscription
+              : session.subscription.id
+          }
 
-        console.log('🔄 Updating phone_number_selections with:', updateData)
-        console.log('🎯 For selection ID:', phone_number_selection_id)
+          console.log('🔄 Updating phone_number_selections with:', updateData)
+          console.log('🎯 For selection ID:', phone_number_selection_id)
 
-        // First, check if the record exists
-        const { data: existingRecord, error: findError } = await supabase
-          .from('phone_number_selections')
-          .select('*')
-          .eq('id', phone_number_selection_id)
-          .single()
+          // First, check if the record exists
+          const { data: existingRecord, error: findError } = await supabase
+            .from('phone_number_selections')
+            .select('*')
+            .eq('id', phone_number_selection_id)
+            .single()
 
-        if (findError || !existingRecord) {
-          console.error('❌ Record not found:', findError, phone_number_selection_id)
+          if (findError || !existingRecord) {
+            console.error('❌ Record not found:', findError, phone_number_selection_id)
+          } else {
+            console.log('📋 Found existing record:', existingRecord)
+          }
+
+          const { data, error } = await supabase
+            .from('phone_number_selections')
+            .update(updateData)
+            .eq('id', phone_number_selection_id)
+            .select()
+
+          if (error) {
+            console.error('❌ Error updating phone_number_selections:', error)
+          } else {
+            console.log('✅ Successfully updated phone_number_selections:', data)
+            console.log('📊 Updated rows count:', data.length)
+          }
         } else {
-          console.log('📋 Found existing record:', existingRecord)
-        }
-
-        const { data, error } = await supabase
-          .from('phone_number_selections')
-          .update(updateData)
-          .eq('id', phone_number_selection_id)
-          .select()
-
-        if (error) {
-          console.error('❌ Error updating phone_number_selections:', error)
-        } else {
-          console.log('✅ Successfully updated phone_number_selections:', data)
-          console.log('📊 Updated rows count:', data.length)
+          if (flow_type === 'own_twilio') {
+            console.log('ℹ️ Skipping phone_number_selections update: own_twilio flow')
+          } else {
+            console.log('ℹ️ Skipping phone_number_selections update: no selection id provided')
+          }
         }
 
         // Get package type ID
@@ -218,52 +228,63 @@ export async function POST(request: NextRequest) {
 
         console.log('✅ Successfully initialized usage tracking:', usage.id)
 
-        // Use local URL for internal calls (webhook calling same server)
-        const baseUrl = 'http://localhost:3001' // Direct local call
-        
-        // Trigger the actual phone number purchase
-        console.log('🚀 Calling purchase endpoint from webhook...')
-        console.log('🔗 Using URL:', `${baseUrl}/api/rent-number/purchase`)
-        const purchaseResponse = await fetch(`${baseUrl}/api/rent-number/purchase`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer webhook-${process.env.STRIPE_WEBHOOK_SECRET}`, // Webhook authorization
-          },
-          body: JSON.stringify({
-            packageId: package_id,
-            phoneNumberSelectionId: phone_number_selection_id,
-            stripeSessionId: session.id,
-            stripeSubscriptionId: session.subscription,
-            stripeCustomerId: session.customer,
-            user_id: user_id // Add user_id for webhook authentication
+        // Trigger phone number purchase only for platform-rented flow and when selection id exists
+        if (flow_type !== 'own_twilio' && phone_number_selection_id) {
+          // Compute base URL from headers so it works on production
+          const host = headersList.get('x-forwarded-host') || headersList.get('host')
+          const proto = headersList.get('x-forwarded-proto') || 'https'
+          const baseUrl = `${proto}://${host}`
+          
+          // Trigger the actual phone number purchase
+          console.log('🚀 Calling purchase endpoint from webhook...')
+          console.log('🔗 Using URL:', `${baseUrl}/api/rent-number/purchase`)
+          const purchaseResponse = await fetch(`${baseUrl}/api/rent-number/purchase`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer webhook-${process.env.STRIPE_WEBHOOK_SECRET}`, // Webhook authorization
+            },
+            body: JSON.stringify({
+              packageId: package_id,
+              phoneNumberSelectionId: phone_number_selection_id,
+              stripeSessionId: session.id,
+              stripeSubscriptionId: session.subscription,
+              stripeCustomerId: session.customer,
+              user_id: user_id // Add user_id for webhook authentication
+            })
           })
-        })
 
-        if (!purchaseResponse.ok) {
-          const errorText = await purchaseResponse.text()
-          console.error('Failed to purchase phone number:', errorText)
-          
-          // Update status to failed
-          await supabase
-            .from('phone_number_selections')
-            .update({
-              status: 'purchase_failed',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', phone_number_selection_id)
+          if (!purchaseResponse.ok) {
+            const errorText = await purchaseResponse.text()
+            console.error('Failed to purchase phone number:', errorText)
+            
+            // Update status to failed
+            await supabase
+              .from('phone_number_selections')
+              .update({
+                status: 'purchase_failed',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', phone_number_selection_id)
+          } else {
+            console.log('Phone number purchased successfully for session:', session.id)
+            
+            // Update status to purchased
+            await supabase
+              .from('phone_number_selections')
+              .update({
+                status: 'purchased',
+                purchased_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', phone_number_selection_id)
+          }
         } else {
-          console.log('Phone number purchased successfully for session:', session.id)
-          
-          // Update status to purchased
-          await supabase
-            .from('phone_number_selections')
-            .update({
-              status: 'purchased',
-              purchased_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', phone_number_selection_id)
+          if (flow_type === 'own_twilio') {
+            console.log('ℹ️ Skipping purchase call: own_twilio flow')
+          } else {
+            console.log('ℹ️ Skipping purchase call: no selection id provided')
+          }
         }
 
       } catch (error) {
