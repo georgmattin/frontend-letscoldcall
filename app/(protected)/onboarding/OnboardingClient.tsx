@@ -605,6 +605,7 @@ export default function OnboardingClient() {
                     <Input
                       value={twilioConfig.account_sid}
                       onChange={(e) => setTwilioConfig(prev => ({ ...prev, account_sid: e.target.value }))}
+                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                       className="bg-[#16181C] border-[#2A2F36] text-white"
                     />
                   </div>
@@ -616,6 +617,7 @@ export default function OnboardingClient() {
                         type={showAuthToken ? 'text' : 'password'}
                         value={twilioConfig.auth_token}
                         onChange={(e) => setTwilioConfig(prev => ({ ...prev, auth_token: e.target.value }))}
+                        placeholder="Your Auth Token"
                         className="pr-10 bg-[#16181C] border-[#2A2F36] text-white"
                       />
                       <button
@@ -633,6 +635,7 @@ export default function OnboardingClient() {
                     <Input
                       value={twilioConfig.api_key}
                       onChange={(e) => setTwilioConfig(prev => ({ ...prev, api_key: e.target.value }))}
+                      placeholder="SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                       className="bg-[#16181C] border-[#2A2F36] text-white"
                     />
                   </div>
@@ -644,6 +647,7 @@ export default function OnboardingClient() {
                         type={showApiSecret ? 'text' : 'password'}
                         value={twilioConfig.api_secret}
                         onChange={(e) => setTwilioConfig(prev => ({ ...prev, api_secret: e.target.value }))}
+                        placeholder="Your API Key Secret"
                         className="pr-10 bg-[#16181C] border-[#2A2F36] text-white"
                       />
                       <button
@@ -661,6 +665,7 @@ export default function OnboardingClient() {
                     <Input
                       value={twilioConfig.twiml_app_sid}
                       onChange={(e) => setTwilioConfig(prev => ({ ...prev, twiml_app_sid: e.target.value }))}
+                      placeholder="APxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                       className="bg-[#16181C] border-[#2A2F36] text-white"
                     />
                   </div>

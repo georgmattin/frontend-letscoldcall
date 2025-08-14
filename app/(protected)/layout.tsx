@@ -38,8 +38,9 @@ export default async function ProtectedLayout({ children }: { children: ReactNod
     // If we are rendering the onboarding page, skip the onboarding gate
     if (typeof currentPath === 'string' && currentPath.includes('/onboarding')) {
       // Render a minimal wrapper (no Navbar/Footer/Twilio) so onboarding has its own layout
+      // Do NOT force colors here; let the onboarding page define its own theme
       return (
-        <div className="min-h-screen w-full bg-[#111315] text-white">
+        <div className="min-h-screen w-full">
           {children}
         </div>
       )
