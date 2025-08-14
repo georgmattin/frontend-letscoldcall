@@ -549,6 +549,43 @@ export async function POST(request: NextRequest) {
       }
       break
 
+    case 'invoice.paid':
+      {
+        // Treat as payment succeeded for our purposes
+        const invoiceAny: any = event.data.object as any
+        console.log('✅ Invoice paid:', invoiceAny.id)
+        try {
+          if (invoiceAny.subscription) {
+            const subId = typeof invoiceAny.subscription === 'string' ? invoiceAny.subscription : invoiceAny.subscription?.id
+            if (subId) {
+              const { data: rental } = await supabase
+                .from('rented_phone_numbers')
+                .select('*')
+                .eq('stripe_subscription_id', subId)
+                .single()
+              if (rental) {
+                await supabase
+                  .from('rented_phone_numbers')
+                  .update({ rental_status: 'active', updated_at: new Date().toISOString() })
+                  .eq('id', rental.id)
+                console.log('📞 Rental reactivated after invoice paid')
+              }
+
+              const { error: usErr } = await supabase
+                .from('user_subscriptions')
+                .update({ status: 'active', updated_at: new Date().toISOString() })
+                .eq('stripe_subscription_id', subId)
+              if (usErr) {
+                console.error('❌ Failed to mark user_subscriptions active (invoice.paid):', usErr)
+              }
+            }
+          }
+        } catch (e) {
+          console.error('❌ Error handling invoice.paid:', e)
+        }
+      }
+      break
+
     case 'customer.subscription.deleted':
       const subscriptionDeleted = event.data.object as Stripe.Subscription
       console.log('🗑️ Subscription deleted/canceled:', subscriptionDeleted.id)
