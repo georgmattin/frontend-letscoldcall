@@ -287,6 +287,70 @@ export async function POST(request: NextRequest) {
       console.log('Subscription updated:', updatedSubscription.id, 'Status:', updatedSubscription.status)
       
       try {
+        // Helper: resolve our internal package_name from Stripe price ID
+        const resolvePackageNameFromPriceId = (priceId: string | null | undefined): string | null => {
+          if (!priceId) return null
+          const map: Record<string, string | undefined> = {
+            [process.env.STRIPE_BASIC_PRICE_ID || '']: 'basic',
+            [process.env.STRIPE_STANDARD_PRICE_ID || '']: 'standard',
+            [process.env.STRIPE_PREMIUM_PRICE_ID || '']: 'premium',
+            [process.env.STRIPE_OWN_BASIC_PRICE_ID || '']: 'own_basic',
+            [process.env.STRIPE_OWN_STANDARD_PRICE_ID || '']: 'own_standard',
+            [process.env.STRIPE_OWN_PREMIUM_PRICE_ID || '']: 'own_premium',
+          }
+          return map[priceId] ?? null
+        }
+
+        // Helper: convert unix seconds to ISO date string (yyyy-mm-dd) for cycle boundaries
+        const unixToISODate = (sec?: number | null): string | null => {
+          if (!sec) return null
+          const d = new Date(sec * 1000)
+          return d.toISOString().split('T')[0]
+        }
+
+        // 1) Detect the active price from subscription items (first item assumed primary)
+        const activeItem = updatedSubscription.items?.data?.[0]
+        const activePriceId = activeItem?.price?.id || null
+        const newPackageName = resolvePackageNameFromPriceId(activePriceId)
+
+        if (newPackageName) {
+          console.log('📦 Detected package change candidate from price:', activePriceId, '→', newPackageName)
+          // Find package_types.id by package_name
+          const { data: pkg, error: pkgErr } = await supabase
+            .from('package_types')
+            .select('id, package_name')
+            .eq('package_name', newPackageName)
+            .single()
+
+          if (pkgErr || !pkg) {
+            console.error('❌ Could not resolve package_types by package_name:', newPackageName, pkgErr)
+          } else {
+            // Update the user's subscription row(s) for this Stripe subscription
+            const cycleStart = unixToISODate((updatedSubscription as any).current_period_start)
+            const cycleEnd = unixToISODate((updatedSubscription as any).current_period_end)
+
+            const { error: updErr } = await supabase
+              .from('user_subscriptions')
+              .update({
+                package_id: pkg.id,
+                // keep is_default as-is, but refresh billing cycle dates
+                billing_cycle_start: cycleStart ?? undefined,
+                billing_cycle_end: cycleEnd ?? undefined,
+                status: updatedSubscription.status === 'active' ? 'active' : undefined,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('stripe_subscription_id', updatedSubscription.id)
+
+            if (updErr) {
+              console.error('❌ Failed to update user_subscriptions with new package_id:', updErr)
+            } else {
+              console.log('✅ Updated user_subscriptions package to', newPackageName, 'for subscription', updatedSubscription.id)
+            }
+          }
+        } else {
+          console.log('ℹ️ No known package mapping for price:', activePriceId, '- skipping package_id update')
+        }
+
         // Update rental status based on subscription status
         const { data: rental, error } = await supabase
           .from('rented_phone_numbers')
