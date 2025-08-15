@@ -294,9 +294,9 @@ export async function POST(request: NextRequest) {
             [process.env.STRIPE_BASIC_PRICE_ID || '']: 'basic',
             [process.env.STRIPE_STANDARD_PRICE_ID || '']: 'standard',
             [process.env.STRIPE_PREMIUM_PRICE_ID || '']: 'premium',
-            [process.env.STRIPE_OWN_BASIC_PRICE_ID || '']: 'own_basic',
-            [process.env.STRIPE_OWN_STANDARD_PRICE_ID || '']: 'own_standard',
-            [process.env.STRIPE_OWN_PREMIUM_PRICE_ID || '']: 'own_premium',
+            [process.env.STRIPE_OWN_BASIC_PRICE_ID || '']: 'basic_own',
+            [process.env.STRIPE_OWN_STANDARD_PRICE_ID || '']: 'standard_own',
+            [process.env.STRIPE_OWN_PREMIUM_PRICE_ID || '']: 'premium_own',
           }
           return map[priceId] ?? null
         }
@@ -377,6 +377,41 @@ export async function POST(request: NextRequest) {
 
           console.log('Rental status updated to:', rentalStatus, 'for subscription:', updatedSubscription.id)
         }
+
+        // Also mirror cancel/reactivation flags into user_subscriptions here (merge from duplicate handler)
+        if (updatedSubscription.cancel_at_period_end) {
+          console.log('⚠️ Subscription set to cancel at period end:', updatedSubscription.id)
+          const { error: updateError } = await supabase
+            .from('user_subscriptions')
+            .update({
+              cancel_at_period_end: true,
+              canceled_at: new Date().toISOString(),
+              status: 'active', // still active until period end
+              updated_at: new Date().toISOString()
+            })
+            .eq('stripe_subscription_id', updatedSubscription.id)
+          if (updateError) {
+            console.error('❌ Error updating subscription cancellation:', updateError)
+          } else {
+            console.log('✅ Subscription marked for cancellation at period end')
+          }
+        } else if (!updatedSubscription.cancel_at_period_end && updatedSubscription.status === 'active') {
+          console.log('✅ Subscription reactivated:', updatedSubscription.id)
+          const { error: reactivateError } = await supabase
+            .from('user_subscriptions')
+            .update({
+              cancel_at_period_end: false,
+              canceled_at: null,
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('stripe_subscription_id', updatedSubscription.id)
+          if (reactivateError) {
+            console.error('❌ Error reactivating subscription:', reactivateError)
+          } else {
+            console.log('✅ Subscription reactivated successfully')
+          }
+        }
       } catch (error) {
         console.error('Error handling subscription update:', error)
       }
@@ -447,55 +482,6 @@ export async function POST(request: NextRequest) {
       }
       break
 
-    case 'customer.subscription.updated':
-      const subscriptionUpdated = event.data.object as Stripe.Subscription
-      console.log('🔄 Subscription updated:', subscriptionUpdated.id)
-      
-      try {
-        // Check if subscription is set to cancel at period end
-        if (subscriptionUpdated.cancel_at_period_end) {
-          console.log('⚠️ Subscription set to cancel at period end:', subscriptionUpdated.id)
-          
-          // Update user_subscriptions table
-          const { error: updateError } = await supabase
-            .from('user_subscriptions')
-            .update({
-              cancel_at_period_end: true,
-              canceled_at: new Date().toISOString(),
-              status: 'active', // Still active until period end
-              updated_at: new Date().toISOString()
-            })
-            .eq('stripe_subscription_id', subscriptionUpdated.id)
-          
-          if (updateError) {
-            console.error('❌ Error updating subscription cancellation:', updateError)
-          } else {
-            console.log('✅ Subscription marked for cancellation at period end')
-          }
-        } else if (!subscriptionUpdated.cancel_at_period_end && subscriptionUpdated.status === 'active') {
-          // Subscription was reactivated
-          console.log('✅ Subscription reactivated:', subscriptionUpdated.id)
-          
-          const { error: reactivateError } = await supabase
-            .from('user_subscriptions')
-            .update({
-              cancel_at_period_end: false,
-              canceled_at: null,
-              status: 'active',
-              updated_at: new Date().toISOString()
-            })
-            .eq('stripe_subscription_id', subscriptionUpdated.id)
-          
-          if (reactivateError) {
-            console.error('❌ Error reactivating subscription:', reactivateError)
-          } else {
-            console.log('✅ Subscription reactivated successfully')
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error handling subscription update:', error)
-      }
-      break
 
     case 'customer.subscription.deleted':
       const subscriptionDeleted = event.data.object as Stripe.Subscription
