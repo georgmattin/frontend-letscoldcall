@@ -101,20 +101,24 @@ export async function POST(request: NextRequest) {
     const phoneNumber = selection.phone_number;
     const friendlyName = selection.friendly_name;
 
-    // Define package details
+    // Define package details (support current package ids from Stripe metadata)
     const packages = {
+      // legacy/test ids
       starter_test: { name: 'Basic', price: 29.99 },
       professional: { name: 'Professional', price: 79.99 },
-      enterprise: { name: 'Enterprise', price: 199.99 }
-    };
+      enterprise: { name: 'Enterprise', price: 199.99 },
+      // current internal package names
+      basic: { name: 'Basic', price: 29.99 },
+      standard: { name: 'Standard', price: 59.99 },
+      premium: { name: 'Premium', price: 99.99 },
+      // own twilio variants
+      basic_own: { name: 'Basic (Own)', price: 19.99 },
+      standard_own: { name: 'Standard (Own)', price: 39.99 },
+      premium_own: { name: 'Premium (Own)', price: 79.99 },
+    } as const;
 
-    const selectedPackage = packages[packageId as keyof typeof packages];
-    if (!selectedPackage) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid package ID'
-      }, { status: 400 });
-    }
+    // Graceful fallback: if unknown id, store the raw id as name and skip price enforcement
+    const selectedPackage = (packages as any)[packageId] || { name: String(packageId), price: null };
 
     // Get user's existing subaccount (should already exist)
     const { data: existingSubaccount, error: subaccountError } = await supabase
@@ -154,11 +158,12 @@ export async function POST(request: NextRequest) {
     } else {
       // Production mode: actually purchase the number from Twilio
       const client = getMainTwilioClient();
+      // Use subaccount context for purchase
+      const subaccount = client.api.accounts(subaccountSid);
       
-      incomingPhoneNumber = await client.incomingPhoneNumbers.create({
+      incomingPhoneNumber = await subaccount.incomingPhoneNumbers.create({
         phoneNumber: phoneNumber,
         friendlyName: friendlyName || `Rented ${phoneNumber}`,
-        accountSid: subaccountSid, // Assign to subaccount
         voiceApplicationSid: existingSubaccount.twiml_app_sid, // Use the TwiML app we created
         smsUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/sms`,
         smsMethod: 'POST'
