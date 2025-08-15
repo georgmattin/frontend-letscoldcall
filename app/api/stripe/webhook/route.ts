@@ -218,8 +218,19 @@ export async function POST(request: NextRequest) {
 
         console.log('✅ Successfully initialized usage tracking:', usage.id)
 
-        // Use local URL for internal calls (webhook calling same server)
-        const baseUrl = 'http://localhost:3001' // Direct local call
+        // Resolve base URL for internal calls (works in prod and dev)
+        const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '')
+        let baseUrl = configuredUrl
+        if (!baseUrl) {
+          const host = headersList.get('host')
+          const proto = headersList.get('x-forwarded-proto') || 'https'
+          if (host) {
+            baseUrl = `${proto}://${host}`
+          } else {
+            // Final fallback: try Vercel-provided URL or a sane localhost default
+            baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+          }
+        }
         
         // Trigger the actual phone number purchase
         console.log('🚀 Calling purchase endpoint from webhook...')
