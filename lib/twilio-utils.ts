@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 
 export interface TwilioConfig {
   account_sid: string;
-  auth_token: string;
+  auth_token?: string;
   api_key?: string;
   api_secret?: string;
   phone_number: string;
@@ -73,11 +73,31 @@ export async function getUserTwilioConfig(userId: string): Promise<TwilioConfig 
 
 export async function getTwilioClient(userId: string) {
   const config = await getUserTwilioConfig(userId);
-  
-  return twilio(config.account_sid, config.auth_token, {
-    timeout: 30000,
-    region: 'us1'
-  });
+
+  if (!config) {
+    throw new Error('Twilio konfiguratsioon puudub.');
+  }
+
+  // Prefer API Key SID/Secret scoped to user's (sub)account; fallback to Auth Token only if present
+  if (config.api_key && config.api_secret && config.account_sid) {
+    console.log(' Twilio client: using API Key/Secret with subaccount context');
+    return twilio(config.api_key, config.api_secret, {
+      accountSid: config.account_sid,
+      timeout: 30000,
+      region: 'us1',
+    } as any);
+  }
+
+  if (config.auth_token && config.account_sid) {
+    console.log(' Twilio client: using Auth Token with subaccount context');
+    return twilio(config.account_sid, config.auth_token, {
+      timeout: 30000,
+      region: 'us1'
+    });
+  }
+
+  console.log(' Twilio credentials incomplete (no API key/secret or auth token).');
+  throw new Error('Twilio kredentsiaalid on puudulikud (API Key/Secret või Auth Token).');
 }
 
 export async function getUserTwilioPreference(userId: string): Promise<'global' | 'own'> {
