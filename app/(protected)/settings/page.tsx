@@ -716,11 +716,8 @@ export default function MyAccountPage() {
 
   // Function to open Stripe Customer Portal
   const handleEditSubscription = async () => {
-    if (!user) return
-    console.log('🟢 handleEditSubscription clicked')
+    if (!user || !subscription?.stripe_customer_id) return
 
-    // Open a tab synchronously to avoid popup blockers
-    const portalTab = window.open('about:blank')
     setCustomerPortalLoading(true)
     try {
       const response = await fetch('/api/stripe/customer-portal', {
@@ -729,8 +726,7 @@ export default function MyAccountPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // customerId optional; server will resolve if missing
-          customerId: subscription?.stripe_customer_id || undefined,
+          customerId: subscription.stripe_customer_id,
           returnUrl: window.location.href
         })
       })
@@ -740,18 +736,11 @@ export default function MyAccountPage() {
       }
 
       const { url } = await response.json()
-      if (portalTab) {
-        portalTab.location.href = url
-      } else {
-        // Fallback: navigate current tab if popup blocked
-        window.location.href = url
-      }
+      // Open in new tab
+      window.open(url, '_blank')
     } catch (error: any) {
       console.error('Error opening customer portal:', error)
-      if (portalTab && !portalTab.closed) {
-        portalTab.close()
-      }
-      alert('Error opening customer portal: ' + (error?.message || 'Unknown error'))
+      alert('Error opening customer portal: ' + error.message)
     } finally {
       setCustomerPortalLoading(false)
     }

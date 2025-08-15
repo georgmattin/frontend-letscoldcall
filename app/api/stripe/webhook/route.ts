@@ -56,13 +56,13 @@ export async function POST(request: NextRequest) {
 
       try {
         // Get the metadata from the session
-        const meta = session.metadata || {}
-        const user_id = meta.user_id as string
-        const package_id = meta.package_id as string
-        const package_name = meta.package_name as string | undefined
-        const phone_number_selection_id = meta.phone_number_selection_id as string | undefined
-        const phone_number = meta.phone_number as string | undefined
-        const flow_type = meta.flow_type as string | undefined
+        const {
+          user_id,
+          package_id,
+          package_name,
+          phone_number_selection_id,
+          phone_number
+        } = session.metadata!
 
         // Mark onboarding as completed on successful checkout session
         try {
@@ -79,64 +79,54 @@ export async function POST(request: NextRequest) {
           console.error('❌ Unexpected error updating onboarding status in webhook:', e)
         }
 
-        // If user selected own Twilio flow, skip phone number selection updates
-        let updateData: any = {}
-        if (flow_type !== 'own_twilio' && phone_number_selection_id) {
-          // Update phone number selection with Stripe IDs
-          updateData = {
-            status: 'paid',
-            stripe_session_id: session.id,
-            updated_at: new Date().toISOString()
-          }
+        // Update phone number selection with Stripe IDs
+        const updateData: any = {
+          status: 'paid',
+          stripe_session_id: session.id,
+          updated_at: new Date().toISOString()
+        }
 
-          // Add customer ID if available
-          if (session.customer) {
-            updateData.stripe_customer_id = typeof session.customer === 'string' 
-              ? session.customer 
-              : session.customer.id
-          }
+        // Add customer ID if available
+        if (session.customer) {
+          updateData.stripe_customer_id = typeof session.customer === 'string' 
+            ? session.customer 
+            : session.customer.id
+        }
 
-          // Add subscription ID if available
-          if (session.subscription) {
-            updateData.stripe_subscription_id = typeof session.subscription === 'string'
-              ? session.subscription
-              : session.subscription.id
-          }
+        // Add subscription ID if available
+        if (session.subscription) {
+          updateData.stripe_subscription_id = typeof session.subscription === 'string'
+            ? session.subscription
+            : session.subscription.id
+        }
 
-          console.log('🔄 Updating phone_number_selections with:', updateData)
-          console.log('🎯 For selection ID:', phone_number_selection_id)
+        console.log('🔄 Updating phone_number_selections with:', updateData)
+        console.log('🎯 For selection ID:', phone_number_selection_id)
 
-          // First, check if the record exists
-          const { data: existingRecord, error: findError } = await supabase
-            .from('phone_number_selections')
-            .select('*')
-            .eq('id', phone_number_selection_id)
-            .single()
+        // First, check if the record exists
+        const { data: existingRecord, error: findError } = await supabase
+          .from('phone_number_selections')
+          .select('*')
+          .eq('id', phone_number_selection_id)
+          .single()
 
-          if (findError || !existingRecord) {
-            console.error('❌ Record not found:', findError, phone_number_selection_id)
-          } else {
-            console.log('📋 Found existing record:', existingRecord)
-          }
-
-          const { data, error } = await supabase
-            .from('phone_number_selections')
-            .update(updateData)
-            .eq('id', phone_number_selection_id)
-            .select()
-
-          if (error) {
-            console.error('❌ Error updating phone_number_selections:', error)
-          } else {
-            console.log('✅ Successfully updated phone_number_selections:', data)
-            console.log('📊 Updated rows count:', data.length)
-          }
+        if (findError || !existingRecord) {
+          console.error('❌ Record not found:', findError, phone_number_selection_id)
         } else {
-          if (flow_type === 'own_twilio') {
-            console.log('ℹ️ Skipping phone_number_selections update: own_twilio flow')
-          } else {
-            console.log('ℹ️ Skipping phone_number_selections update: no selection id provided')
-          }
+          console.log('📋 Found existing record:', existingRecord)
+        }
+
+        const { data, error } = await supabase
+          .from('phone_number_selections')
+          .update(updateData)
+          .eq('id', phone_number_selection_id)
+          .select()
+
+        if (error) {
+          console.error('❌ Error updating phone_number_selections:', error)
+        } else {
+          console.log('✅ Successfully updated phone_number_selections:', data)
+          console.log('📊 Updated rows count:', data.length)
         }
 
         // Get package type ID
@@ -228,63 +218,52 @@ export async function POST(request: NextRequest) {
 
         console.log('✅ Successfully initialized usage tracking:', usage.id)
 
-        // Trigger phone number purchase only for platform-rented flow and when selection id exists
-        if (flow_type !== 'own_twilio' && phone_number_selection_id) {
-          // Compute base URL from headers so it works on production
-          const host = headersList.get('x-forwarded-host') || headersList.get('host')
-          const proto = headersList.get('x-forwarded-proto') || 'https'
-          const baseUrl = `${proto}://${host}`
-          
-          // Trigger the actual phone number purchase
-          console.log('🚀 Calling purchase endpoint from webhook...')
-          console.log('🔗 Using URL:', `${baseUrl}/api/rent-number/purchase`)
-          const purchaseResponse = await fetch(`${baseUrl}/api/rent-number/purchase`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer webhook-${process.env.STRIPE_WEBHOOK_SECRET}`, // Webhook authorization
-            },
-            body: JSON.stringify({
-              packageId: package_id,
-              phoneNumberSelectionId: phone_number_selection_id,
-              stripeSessionId: session.id,
-              stripeSubscriptionId: session.subscription,
-              stripeCustomerId: session.customer,
-              user_id: user_id // Add user_id for webhook authentication
-            })
+        // Use local URL for internal calls (webhook calling same server)
+        const baseUrl = 'http://localhost:3001' // Direct local call
+        
+        // Trigger the actual phone number purchase
+        console.log('🚀 Calling purchase endpoint from webhook...')
+        console.log('🔗 Using URL:', `${baseUrl}/api/rent-number/purchase`)
+        const purchaseResponse = await fetch(`${baseUrl}/api/rent-number/purchase`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer webhook-${process.env.STRIPE_WEBHOOK_SECRET}`, // Webhook authorization
+          },
+          body: JSON.stringify({
+            packageId: package_id,
+            phoneNumberSelectionId: phone_number_selection_id,
+            stripeSessionId: session.id,
+            stripeSubscriptionId: session.subscription,
+            stripeCustomerId: session.customer,
+            user_id: user_id // Add user_id for webhook authentication
           })
+        })
 
-          if (!purchaseResponse.ok) {
-            const errorText = await purchaseResponse.text()
-            console.error('Failed to purchase phone number:', errorText)
-            
-            // Update status to failed
-            await supabase
-              .from('phone_number_selections')
-              .update({
-                status: 'purchase_failed',
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', phone_number_selection_id)
-          } else {
-            console.log('Phone number purchased successfully for session:', session.id)
-            
-            // Update status to purchased
-            await supabase
-              .from('phone_number_selections')
-              .update({
-                status: 'purchased',
-                purchased_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', phone_number_selection_id)
-          }
+        if (!purchaseResponse.ok) {
+          const errorText = await purchaseResponse.text()
+          console.error('Failed to purchase phone number:', errorText)
+          
+          // Update status to failed
+          await supabase
+            .from('phone_number_selections')
+            .update({
+              status: 'purchase_failed',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', phone_number_selection_id)
         } else {
-          if (flow_type === 'own_twilio') {
-            console.log('ℹ️ Skipping purchase call: own_twilio flow')
-          } else {
-            console.log('ℹ️ Skipping purchase call: no selection id provided')
-          }
+          console.log('Phone number purchased successfully for session:', session.id)
+          
+          // Update status to purchased
+          await supabase
+            .from('phone_number_selections')
+            .update({
+              status: 'purchased',
+              purchased_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', phone_number_selection_id)
         }
 
       } catch (error) {
@@ -304,143 +283,38 @@ export async function POST(request: NextRequest) {
       break
 
     case 'customer.subscription.updated':
-      {
-        const subscriptionUpdated = event.data.object as Stripe.Subscription
-        console.log('🔄 Subscription updated:', subscriptionUpdated.id, 'Status:', subscriptionUpdated.status)
+      const updatedSubscription = event.data.object as Stripe.Subscription
+      console.log('Subscription updated:', updatedSubscription.id, 'Status:', updatedSubscription.status)
+      
+      try {
+        // Update rental status based on subscription status
+        const { data: rental, error } = await supabase
+          .from('rented_phone_numbers')
+          .select('*')
+          .eq('stripe_subscription_id', updatedSubscription.id)
+          .single()
 
-        // Helper: derive Stripe plan identifiers
-        const firstItem = subscriptionUpdated.items?.data?.[0]
-        const priceId = firstItem?.price?.id
-        const priceNickname = firstItem?.price?.nickname as string | undefined
-        const productField = firstItem?.price?.product as string | Stripe.Product | undefined
-        const productId = typeof productField === 'string' ? productField : productField?.id
-
-        // Convert Stripe period times to ISO (cast for SDK typing differences)
-        const subAny: any = subscriptionUpdated
-        const periodStartIso = subAny.current_period_start
-          ? new Date(subAny.current_period_start * 1000).toISOString()
-          : undefined
-        const periodEndIso = subAny.current_period_end
-          ? new Date(subAny.current_period_end * 1000).toISOString()
-          : undefined
-
-        try {
-          // 1) Update rental status based on subscription status
-          try {
-            const { data: rental } = await supabase
-              .from('rented_phone_numbers')
-              .select('*')
-              .eq('stripe_subscription_id', subscriptionUpdated.id)
-              .single()
-
-            if (rental) {
-              let rentalStatus = 'active'
-              if (
-                subscriptionUpdated.status === 'canceled' ||
-                subscriptionUpdated.status === 'unpaid' ||
-                subscriptionUpdated.status === 'past_due'
-              ) {
-                rentalStatus = 'suspended'
-              }
-
-              await supabase
-                .from('rented_phone_numbers')
-                .update({
-                  rental_status: rentalStatus,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', rental.id)
-
-              console.log('📞 Rental status set to', rentalStatus)
-            }
-          } catch (e) {
-            console.error('❌ Rental status update error:', e)
+        if (rental && !error) {
+          let rentalStatus = 'active'
+          
+          if (updatedSubscription.status === 'canceled' || 
+              updatedSubscription.status === 'unpaid' ||
+              updatedSubscription.status === 'past_due') {
+            rentalStatus = 'suspended'
           }
 
-          // 2) Map Stripe plan -> internal package_types.id
-          let mappedPackageId: number | null = null
-          try {
-            // Try by stripe_price_id
-            if (priceId) {
-              const { data: pkgByPrice, error: pkgPriceErr } = await supabase
-                .from('package_types')
-                .select('id, package_name, stripe_price_id, stripe_product_id')
-                .eq('stripe_price_id', priceId)
-                .single()
-              if (!pkgPriceErr && pkgByPrice) {
-                mappedPackageId = pkgByPrice.id
-              }
-            }
-            // Try by stripe_product_id
-            if (!mappedPackageId && productId) {
-              const { data: pkgByProduct, error: pkgProdErr } = await supabase
-                .from('package_types')
-                .select('id, package_name, stripe_price_id, stripe_product_id')
-                .eq('stripe_product_id', productId)
-                .single()
-              if (!pkgProdErr && pkgByProduct) {
-                mappedPackageId = pkgByProduct.id
-              }
-            }
-            // Fallback by package_name matching price nickname
-            if (!mappedPackageId && priceNickname) {
-              const { data: pkgByName, error: pkgNameErr } = await supabase
-                .from('package_types')
-                .select('id, package_name')
-                .eq('package_name', priceNickname)
-                .single()
-              if (!pkgNameErr && pkgByName) {
-                mappedPackageId = pkgByName.id
-              }
-            }
-          } catch (mapErr) {
-            console.error('❌ Package mapping error:', mapErr)
-          }
-
-          // 3) Update user_subscriptions row for this Stripe subscription
-          try {
-            const updateFields: any = {
-              status: subscriptionUpdated.status, // keep raw Stripe status for transparency
+          await supabase
+            .from('rented_phone_numbers')
+            .update({
+              rental_status: rentalStatus,
               updated_at: new Date().toISOString()
-            }
+            })
+            .eq('id', rental.id)
 
-            if (typeof subscriptionUpdated.cancel_at_period_end === 'boolean') {
-              updateFields.cancel_at_period_end = subscriptionUpdated.cancel_at_period_end
-              updateFields.canceled_at = subscriptionUpdated.cancel_at_period_end ? new Date().toISOString() : null
-            }
-
-            if (periodStartIso && periodEndIso) {
-              updateFields.subscription_start_date = periodStartIso
-              updateFields.subscription_end_date = periodEndIso
-              updateFields.billing_cycle_start = periodStartIso.split('T')[0]
-              updateFields.billing_cycle_end = periodEndIso.split('T')[0]
-            }
-
-            if (mappedPackageId) {
-              updateFields.package_id = mappedPackageId
-            }
-
-            const { error: subUpdErr } = await supabase
-              .from('user_subscriptions')
-              .update(updateFields)
-              .eq('stripe_subscription_id', subscriptionUpdated.id)
-
-            if (subUpdErr) {
-              console.error('❌ user_subscriptions update failed:', subUpdErr)
-            } else {
-              console.log('✅ user_subscriptions synced with Stripe subscription update')
-            }
-          } catch (subErr) {
-            console.error('❌ Error syncing user_subscriptions:', subErr)
-          }
-
-          // 4) Reactivation case (cancel_at_period_end turned off and status active)
-          if (!subscriptionUpdated.cancel_at_period_end && subscriptionUpdated.status === 'active') {
-            console.log('✅ Subscription active and not set to cancel at period end')
-          }
-        } catch (error) {
-          console.error('❌ Error handling subscription update:', error)
+          console.log('Rental status updated to:', rentalStatus, 'for subscription:', updatedSubscription.id)
         }
+      } catch (error) {
+        console.error('Error handling subscription update:', error)
       }
       break
 
@@ -509,80 +383,53 @@ export async function POST(request: NextRequest) {
       }
       break
 
-    
-    case 'invoice.payment_succeeded':
-      {
-        // Cast for compatibility across Stripe versions
-        const invoiceAny: any = event.data.object as any
-        console.log('✅ Invoice payment succeeded:', invoiceAny.id)
-        try {
-          // Resume rental if any
-          if (invoiceAny.subscription) {
-            const subId = typeof invoiceAny.subscription === 'string' ? invoiceAny.subscription : invoiceAny.subscription?.id
-            if (subId) {
-              const { data: rental } = await supabase
-                .from('rented_phone_numbers')
-                .select('*')
-                .eq('stripe_subscription_id', subId)
-                .single()
-              if (rental) {
-                await supabase
-                  .from('rented_phone_numbers')
-                  .update({ rental_status: 'active', updated_at: new Date().toISOString() })
-                  .eq('id', rental.id)
-                console.log('📞 Rental reactivated after successful payment')
-              }
-
-              // Ensure user_subscriptions is active
-              const { error: usErr } = await supabase
-                .from('user_subscriptions')
-                .update({ status: 'active', updated_at: new Date().toISOString() })
-                .eq('stripe_subscription_id', subId)
-              if (usErr) {
-                console.error('❌ Failed to mark user_subscriptions active:', usErr)
-              }
-            }
+    case 'customer.subscription.updated':
+      const subscriptionUpdated = event.data.object as Stripe.Subscription
+      console.log('🔄 Subscription updated:', subscriptionUpdated.id)
+      
+      try {
+        // Check if subscription is set to cancel at period end
+        if (subscriptionUpdated.cancel_at_period_end) {
+          console.log('⚠️ Subscription set to cancel at period end:', subscriptionUpdated.id)
+          
+          // Update user_subscriptions table
+          const { error: updateError } = await supabase
+            .from('user_subscriptions')
+            .update({
+              cancel_at_period_end: true,
+              canceled_at: new Date().toISOString(),
+              status: 'active', // Still active until period end
+              updated_at: new Date().toISOString()
+            })
+            .eq('stripe_subscription_id', subscriptionUpdated.id)
+          
+          if (updateError) {
+            console.error('❌ Error updating subscription cancellation:', updateError)
+          } else {
+            console.log('✅ Subscription marked for cancellation at period end')
           }
-        } catch (e) {
-          console.error('❌ Error handling payment success:', e)
-        }
-      }
-      break
-
-    case 'invoice.paid':
-      {
-        // Treat as payment succeeded for our purposes
-        const invoiceAny: any = event.data.object as any
-        console.log('✅ Invoice paid:', invoiceAny.id)
-        try {
-          if (invoiceAny.subscription) {
-            const subId = typeof invoiceAny.subscription === 'string' ? invoiceAny.subscription : invoiceAny.subscription?.id
-            if (subId) {
-              const { data: rental } = await supabase
-                .from('rented_phone_numbers')
-                .select('*')
-                .eq('stripe_subscription_id', subId)
-                .single()
-              if (rental) {
-                await supabase
-                  .from('rented_phone_numbers')
-                  .update({ rental_status: 'active', updated_at: new Date().toISOString() })
-                  .eq('id', rental.id)
-                console.log('📞 Rental reactivated after invoice paid')
-              }
-
-              const { error: usErr } = await supabase
-                .from('user_subscriptions')
-                .update({ status: 'active', updated_at: new Date().toISOString() })
-                .eq('stripe_subscription_id', subId)
-              if (usErr) {
-                console.error('❌ Failed to mark user_subscriptions active (invoice.paid):', usErr)
-              }
-            }
+        } else if (!subscriptionUpdated.cancel_at_period_end && subscriptionUpdated.status === 'active') {
+          // Subscription was reactivated
+          console.log('✅ Subscription reactivated:', subscriptionUpdated.id)
+          
+          const { error: reactivateError } = await supabase
+            .from('user_subscriptions')
+            .update({
+              cancel_at_period_end: false,
+              canceled_at: null,
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('stripe_subscription_id', subscriptionUpdated.id)
+          
+          if (reactivateError) {
+            console.error('❌ Error reactivating subscription:', reactivateError)
+          } else {
+            console.log('✅ Subscription reactivated successfully')
           }
-        } catch (e) {
-          console.error('❌ Error handling invoice.paid:', e)
         }
+      } catch (error) {
+        console.error('❌ Error handling subscription update:', error)
       }
       break
 
