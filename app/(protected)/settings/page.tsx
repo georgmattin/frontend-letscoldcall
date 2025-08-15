@@ -716,7 +716,8 @@ export default function MyAccountPage() {
 
   // Function to open Stripe Customer Portal
   const handleEditSubscription = async () => {
-    if (!user || !subscription?.stripe_customer_id) return
+    if (!user) return
+    console.log('🟢 handleEditSubscription clicked')
 
     // Open a tab synchronously to avoid popup blockers
     const portalTab = window.open('about:blank')
@@ -728,7 +729,8 @@ export default function MyAccountPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          customerId: subscription.stripe_customer_id,
+          // customerId optional; server will resolve if missing
+          customerId: subscription?.stripe_customer_id || undefined,
           returnUrl: window.location.href
         })
       })
