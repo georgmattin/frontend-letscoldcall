@@ -203,33 +203,15 @@ export async function GET(request: NextRequest) {
           endDate: endDate.toISOString().split('T')[0] 
         })
 
-        // Build Twilio client for the user's subaccount.
-        // Prefer API Key SID/Secret + accountSid (best practice). Fall back to Auth Token if explicitly stored.
-        let client: ReturnType<typeof twilio>
-        const subAccountSid = (twilioConfig as any).account_sid
-        const apiKeySid = (twilioConfig as any).api_key
-        const apiKeySecret = (twilioConfig as any).api_secret
-        const authToken = (twilioConfig as any).auth_token
+        // Use Twilio API directly
+        const client = twilio(twilioConfig.account_sid, twilioConfig.auth_token)
 
-        if (apiKeySid && apiKeySecret && subAccountSid) {
-          console.log('🔐 Using API Key credentials for Twilio minutes fetch (scoped to subaccount)')
-          client = twilio(apiKeySid, apiKeySecret, { accountSid: subAccountSid })
-        } else if (authToken && subAccountSid) {
-          console.log('🔐 Using Auth Token credentials for Twilio minutes fetch (subaccount)')
-          client = twilio(subAccountSid, authToken)
-        } else {
-          console.log('⚠️ Twilio credentials incomplete (no API key/secret or auth token). Skipping minutes fetch.')
-          client = undefined as any
-        }
-
-        // Fetch calls for this month (only if client available), explicitly scoping to subaccount
-        const calls = client && subAccountSid
-          ? await client.api.accounts(subAccountSid).calls.list({
-              startTimeAfter: startDate as any,
-              startTimeBefore: endDate as any,
-              limit: 1000,
-            } as any)
-          : []
+        // Fetch calls for this month
+        const calls = await client.calls.list({
+          startTimeAfter: startDate,
+          startTimeBefore: endDate,
+          limit: 1000
+        })
 
         console.log('🔍 Twilio calls found:', calls.length)
 
