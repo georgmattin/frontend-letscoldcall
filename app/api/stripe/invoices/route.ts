@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil',
-})
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,16 +15,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's subscription to find Stripe customer ID
+    // Get the most recent subscription (active or canceled) to find Stripe customer ID
     const { data: subscription, error: subError } = await supabase
       .from('user_subscriptions')
-      .select('stripe_customer_id')
+      .select('stripe_customer_id, created_at, status')
       .eq('user_id', user.id)
-      .eq('status', 'active')
+      .in('status', ['active', 'canceled'])
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
 
+    // If no subscription with a Stripe customer is found, return empty list (not an error for UI)
     if (subError || !subscription?.stripe_customer_id) {
-      return NextResponse.json({ error: 'No active subscription found' }, { status: 404 })
+      return NextResponse.json({ invoices: [] }, { status: 200 })
     }
 
     // Fetch invoices from Stripe
