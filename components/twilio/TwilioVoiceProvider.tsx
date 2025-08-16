@@ -65,23 +65,8 @@ export default function TwilioVoiceProvider() {
       }
       sdkReadyRef.current = true
 
-      // Fetch access token from backend with Supabase user JWT
-      const supabase = createSupabaseClient()
-      const { data: sessionRes } = await supabase.auth.getSession()
-      const userJwt = sessionRes?.session?.access_token
-      const rawUrl = process.env.NEXT_PUBLIC_BACKEND_URL || ""
-      const normalizedBase = (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) ? rawUrl : (rawUrl ? `https://${rawUrl}` : "")
-      const backendUrl = normalizedBase.replace(/\/+$/, "")
-      // Build headers with Supabase JWT and API secret if available
-      const headersInit1: Record<string, string> = {}
-      if (userJwt) headersInit1["Authorization"] = `Bearer ${userJwt}`
-      const apiSecret1 = process.env.NEXT_PUBLIC_API_SECRET
-      if (apiSecret1) headersInit1["x-api-secret"] = apiSecret1
-
-      const res = await fetch(`${backendUrl}/api/access-token`, {
-        cache: "no-store",
-        headers: Object.keys(headersInit1).length ? headersInit1 : undefined,
-      })
+      // Fetch access token from unified Next.js route (same-origin)
+      const res = await fetch(`/api/twilio/access-token`, { cache: "no-store" })
       if (!res.ok) {
         throw new Error(`Failed to fetch Twilio token: ${res.status}`)
       }
@@ -402,20 +387,7 @@ export default function TwilioVoiceProvider() {
       const onReject = onCancel
       const onTokenWillExpire = async () => {
         try {
-          const supabase = createSupabaseClient()
-          const { data: sessionRes } = await supabase.auth.getSession()
-          const userJwt = sessionRes?.session?.access_token
-          const rawUrl = process.env.NEXT_PUBLIC_BACKEND_URL || ""
-          const normalizedBase = (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) ? rawUrl : (rawUrl ? `https://${rawUrl}` : "")
-          const backendUrl = normalizedBase.replace(/\/+$/, "")
-          const headersInit2: Record<string, string> = {}
-          if (userJwt) headersInit2["Authorization"] = `Bearer ${userJwt}`
-          const apiSecret2 = process.env.NEXT_PUBLIC_API_SECRET
-          if (apiSecret2) headersInit2["x-api-secret"] = apiSecret2
-          const res = await fetch(`${backendUrl}/api/access-token`, {
-            cache: "no-store",
-            headers: Object.keys(headersInit2).length ? headersInit2 : undefined,
-          })
+          const res = await fetch(`/api/twilio/access-token`, { cache: "no-store" })
           const data = await res.json()
           if (data?.token) {
             device.updateToken(data.token)
