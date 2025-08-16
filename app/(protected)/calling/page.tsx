@@ -452,11 +452,80 @@ export default function CallingPage() {
   }, [])
 
   // Observe the global Twilio Device created by TwilioVoiceProvider and reflect
-  // its readiness locally so the Call button can enable.
+  // its readiness locally so the Call button can enable. Re-run when sessionReady flips
+  // (i.e., after the first user gesture) because the provider may create the Device then.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const dev: any = (window as any).__twilioDevice || (window as any).Device
-    if (!dev) return
+    let dev: any = (window as any).__twilioDevice || (window as any).Device
+    let cleanupReady: (() => void) | undefined
+    let pollId: any
+
+    // If device not present yet, poll briefly to catch late initialization from provider
+    if (!dev) {
+      let attempts = 0
+      pollId = setInterval(() => {
+        attempts += 1
+        dev = (window as any).__twilioDevice || (window as any).Device
+        if (dev) {
+          // Found device; proceed to bind and sync state
+          try {
+            if ((dev as any)?.state === 'ready') {
+              setTwilioReady(true)
+              setTwilioDevice(dev)
+              twilioDeviceRef.current = dev
+              setTwilioError(null)
+            }
+          } catch {}
+          const onReady = () => {
+            setTwilioReady(true)
+            setTwilioDevice(dev)
+            twilioDeviceRef.current = dev
+            setTwilioError(null)
+            console.log('🔉 Twilio Device ready (calling page)')
+            // Attempt hydration on ready as well
+            try {
+              const existingConn = getActiveConnection()
+              if (existingConn && !activeConnectionRef.current) {
+                console.log('♻️ Hydrating accepted incoming call after device ready')
+                setActiveConnection(existingConn)
+                activeConnectionRef.current = existingConn
+                setIsConnecting(false)
+                setCallStarted(true)
+                try { if (timerRef.current) { clearInterval(timerRef.current) } } catch {}
+                callDurationRef.current = callDurationRef.current || 0
+                timerRef.current = setInterval(() => {
+                  callDurationRef.current += 1
+                  setCallDuration(callDurationRef.current)
+                }, 1000) as unknown as NodeJS.Timeout
+                try {
+                  existingConn.on && existingConn.on('disconnect', () => {
+                    console.log('🔚 Remote disconnected (hydrated connection on ready)')
+                    try { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } } catch {}
+                    const duration = callDurationRef.current || 0
+                    setFinalCallDuration(duration)
+                    setCallStarted(false)
+                    setCallEnded(true)
+                    setIsConnecting(false)
+                    setIsScriptCollapsed(true)
+                    setIsNotesCollapsed(false)
+                    setActiveConnection(null)
+                    activeConnectionRef.current = null
+                    try { clearActiveConnection() } catch {}
+                  })
+                } catch {}
+              }
+            } catch {}
+          }
+          try { dev.on && dev.on('ready', onReady) } catch {}
+          cleanupReady = () => { try { dev.off && dev.off('ready', onReady) } catch {} }
+          clearInterval(pollId)
+        } else if (attempts >= 40) {
+          // ~10s max (40 * 250ms)
+          clearInterval(pollId)
+        }
+      }, 250)
+      return () => { try { clearInterval(pollId) } catch {}; if (cleanupReady) cleanupReady() }
+    }
 
     // If device is already ready, sync immediately
     try {
@@ -548,7 +617,7 @@ export default function CallingPage() {
     return () => {
       try { dev.off && dev.off('ready', onReady) } catch {}
     }
-  }, [])
+  }, [sessionReady])
 
   // Late hydration fallback: poll briefly after mount to detect an already-active connection
   useEffect(() => {
