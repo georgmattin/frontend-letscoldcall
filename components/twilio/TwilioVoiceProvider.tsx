@@ -572,10 +572,28 @@ export default function TwilioVoiceProvider() {
   const handleEnableCalling = useCallback(async () => {
     setEnabling(true)
     try {
+      // Mark gesture immediately so dependent UIs can react early in this tick
+      try { window.sessionStorage.setItem('twilio_audio_gesture', '1') } catch {}
+      console.log('🖱️ First user gesture captured: enabling calling')
+
+      // Best-effort: explicitly resume a Web Audio context to satisfy autoplay policy
+      try {
+        const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext
+        if (AC) {
+          const ac = new AC()
+          await ac.resume()
+          try { await ac.close() } catch {}
+          console.log('🎛️ AudioContext resumed successfully')
+        }
+      } catch (acErr) {
+        console.warn('AudioContext resume attempt failed or not needed', acErr)
+      }
+
       // Request microphone permission to satisfy autoplay/user gesture requirements
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         stream.getTracks().forEach(t => t.stop())
+        console.log('🎤 Microphone permission granted')
       } catch (permErr) {
         console.warn('Microphone permission request failed', permErr)
         // Continue; some browsers allow incoming without immediate mic capture
@@ -583,12 +601,15 @@ export default function TwilioVoiceProvider() {
 
       // Ensure device exists and is registered
       const device = await ensureDevice()
+      if (!device) {
+        console.warn('❌ Twilio Device not created after enable')
+      } else {
+        console.log('✅ Twilio Device created')
+      }
       if (device && typeof device.register === 'function') {
         try { await device.register() } catch {}
       }
 
-      // Remember gesture for this tab session to avoid re-prompting until tab reload
-      try { window.sessionStorage.setItem('twilio_audio_gesture', '1') } catch {}
       // Optional: keep previous behavior to remember user's preference (not used for gating init)
       try { window.localStorage.setItem('twilio_calling_enabled', '1') } catch {}
       // Flip the gate so the initialization effect can run
@@ -616,10 +637,12 @@ export default function TwilioVoiceProvider() {
     document.addEventListener('pointerdown', onFirstGesture, opts)
     document.addEventListener('keydown', onFirstGesture, opts)
     document.addEventListener('touchstart', onFirstGesture, opts)
+    console.log('⏳ Waiting for first user gesture to enable calling')
     const cleanup = () => {
       document.removeEventListener('pointerdown', onFirstGesture, opts as any)
       document.removeEventListener('keydown', onFirstGesture, opts as any)
       document.removeEventListener('touchstart', onFirstGesture, opts as any)
+      console.log('🧹 Gesture listeners removed')
     }
     return cleanup
   }, [needsEnable, handleEnableCalling])

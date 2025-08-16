@@ -34,6 +34,25 @@ export async function GET(request: NextRequest) {
       throw configError
     }
 
+    // Basic credential shape validation to avoid confusing JWT errors (31202)
+    const acct = config?.account_sid || ''
+    const key = config?.api_key || ''
+    const secret = config?.api_secret || ''
+    const app = config?.twiml_app_sid || ''
+    const problems: string[] = []
+    if (!acct.startsWith('AC')) problems.push('account_sid must start with "AC"')
+    if (!key.startsWith('SK')) problems.push('api_key must be a Twilio API Key SID starting with "SK" (not Account SID)')
+    if (!secret || secret.length < 20) problems.push('api_secret must be the API Key Secret (not Account Auth Token)')
+    if (!app.startsWith('AP')) problems.push('twiml_app_sid must start with "AP"')
+    if (problems.length) {
+      return NextResponse.json({
+        error: 'Twilio konfiguratsioon on vigane',
+        details: problems,
+        hint: 'Loo Twilio Console-s uus API Key (SK...) samas (sub)kontos kui Account SID (AC...) ja kasuta selle Secret väärtust. Veendu, et TwiML App SID (AP...) kuulub samale kontole.',
+        code: 'INVALID_TWILIO_CONFIG'
+      }, { status: 400 })
+    }
+
     // Use dynamic import for Twilio to handle server-side environment
     const { default: twilio } = await import('twilio')
     
@@ -48,9 +67,9 @@ export async function GET(request: NextRequest) {
 
     // Create access token using user's configuration
     const token = new AccessToken(
-      config.account_sid,
-      config.api_key,
-      config.api_secret,
+      acct,
+      key,
+      secret,
       { 
         identity: `user_${user.id}`, // Use user ID as identity
         ttl: 3600 // Token valid for 1 hour
